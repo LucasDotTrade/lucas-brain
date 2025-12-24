@@ -17,7 +17,7 @@ export const extractDocument = createTool({
     raw_text: z.string(),
   }),
   execute: async ({ context }) => {
-    const response = await fetch('http://localhost:8000/extract', {
+    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/extract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: context.fileUrl }),
@@ -52,7 +52,7 @@ export const validateDocuments = createTool({
     overall_status: z.string(),
   }),
   execute: async ({ context }) => {
-    const response = await fetch('http://localhost:8000/validate', {
+    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/validate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(context),
@@ -77,7 +77,7 @@ export const analyzeDocument = createTool({
     recommendations: z.array(z.string()),
   }),
   execute: async ({ context }) => {
-    const response = await fetch('http://localhost:8000/analyze', {
+    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(context),
