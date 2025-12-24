@@ -33,7 +33,7 @@ When you find issues, explain:
 2. Why it matters (bank rejection, delays, fees)
 3. How to fix it
 `,
-  model: process.env.MODEL || 'anthropic/claude-sonnet-4-20250514',
+  model: process.env.MODEL || 'anthropic/claude-3-5-sonnet-20241022',
   tools: { extractDocument, validateDocuments, analyzeDocument },
 });
 
