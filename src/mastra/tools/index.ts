@@ -17,7 +17,7 @@ export const extractDocument = createTool({
     raw_text: z.string(),
   }),
   execute: async ({ context }) => {
-    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/extract', {
+    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/extract-url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: context.fileUrl }),
