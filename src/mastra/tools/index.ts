@@ -1,87 +1,89 @@
-import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
-// Tool to extract data from trade documents via Python engine
+const RAILWAY_API = "https://lucas-core-production.up.railway.app";
+
 export const extractDocument = createTool({
-  id: 'extract-document',
-  description: 'Extract structured data from trade documents (LC, Bill of Lading, Invoice, Packing List, Certificate of Origin)',
+  id: "extractDocument",
+  description: "Extract text and data from a document image or PDF. Call this first when user sends a document.",
   inputSchema: z.object({
-    fileUrl: z.string().describe('URL to the document file'),
-  }),
-  outputSchema: z.object({
-    document_type: z.string(),
-    confidence_score: z.number(),
-    fields: z.record(z.any()),
-    tables: z.array(z.any()),
-    flags: z.array(z.string()),
-    raw_text: z.string(),
+    url: z.string().describe("URL of the document image or PDF to extract"),
   }),
   execute: async ({ context }) => {
-    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/extract-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: context.fileUrl }),
-    });
-    return await response.json();
+    try {
+      const response = await fetch(`${RAILWAY_API}/extract-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: context.url }),
+      });
+      
+      if (!response.ok) {
+        return { error: `Extraction failed: ${response.status}` };
+      }
+      
+      const data = await response.json();
+      return {
+        success: true,
+        document_type: data.document_type,
+        text: data.raw_text,
+        fields: data.fields,
+        readability_score: data.readability_score,
+      };
+    } catch (error) {
+      return { error: `Extraction error: ${error}` };
+    }
   },
 });
 
-// Tool to validate documents against each other
-export const validateDocuments = createTool({
-  id: 'validate-documents',
-  description: 'Cross-validate LC, Bill of Lading, and Invoice for discrepancies',
-  inputSchema: z.object({
-    lc: z.object({
-      document_type: z.string(),
-      fields: z.record(z.any()),
-      raw_text: z.string(),
-    }),
-    bl: z.object({
-      document_type: z.string(),
-      fields: z.record(z.any()),
-      raw_text: z.string(),
-    }),
-    invoice: z.object({
-      document_type: z.string(),
-      fields: z.record(z.any()),
-      raw_text: z.string(),
-    }),
-  }),
-  outputSchema: z.object({
-    discrepancies: z.array(z.any()),
-    overall_status: z.string(),
-  }),
-  execute: async ({ context }) => {
-    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(context),
-    });
-    return await response.json();
-  },
-});
-
-// Tool to get AI analysis of a document
 export const analyzeDocument = createTool({
-  id: 'analyze-document',
-  description: 'Get AI-powered compliance analysis with red flags and recommendations',
+  id: "analyzeDocument", 
+  description: "Perform deep analysis on a single document. Use after extractDocument to get detailed compliance check.",
   inputSchema: z.object({
-    document_type: z.string(),
-    raw_text: z.string(),
-    fields: z.record(z.any()).optional(),
-  }),
-  outputSchema: z.object({
-    analysis: z.record(z.any()),
-    red_flags: z.array(z.string()),
-    compliance_score: z.number(),
-    recommendations: z.array(z.string()),
+    text: z.string().describe("The extracted document text"),
+    document_type: z.string().describe("Type: letter_of_credit, bill_of_lading, commercial_invoice, packing_list, certificate_of_origin"),
   }),
   execute: async ({ context }) => {
-    const response = await fetch('https://unignited-couth-zane.ngrok-free.dev/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(context),
-    });
-    return await response.json();
+    try {
+      const response = await fetch(`${RAILWAY_API}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: context.text, document_type: context.document_type }),
+      });
+      
+      if (!response.ok) {
+        return { error: `Analysis failed: ${response.status}` };
+      }
+      
+      return await response.json();
+    } catch (error) {
+      return { error: `Analysis error: ${error}` };
+    }
+  },
+});
+
+export const validateDocuments = createTool({
+  id: "validateDocuments",
+  description: "Cross-validate all stored documents for a user against each other and LC requirements. Call when user types 'validate' or wants to check document consistency.",
+  inputSchema: z.object({
+    phone: z.string().describe("User's phone number to retrieve their stored documents"),
+  }),
+  execute: async ({ context }) => {
+    try {
+      const cleanPhone = context.phone.replace("whatsapp:", "").replace("+", "");
+      
+      const response = await fetch(`${RAILWAY_API}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone }),
+      });
+      
+      if (!response.ok) {
+        return { error: `Validation failed: ${response.status}` };
+      }
+      
+      return await response.json();
+    } catch (error) {
+      return { error: `Validation error: ${error}` };
+    }
   },
 });
