@@ -168,3 +168,46 @@ export const getIssuePatterns = createTool({
     }
   },
 });
+
+export const getOutcomeStats = createTool({
+  id: "getOutcomeStats",
+  description: "Query rejection patterns and outcome statistics from past document analyses. Use this to back up advice with real data.",
+  inputSchema: z.object({
+    documentType: z.string().optional().describe("Filter by document type: lc, bl, invoice, etc."),
+    userPhone: z.string().optional().describe("Filter by specific user's history"),
+  }),
+  execute: async ({ context }) => {
+    try {
+      const cleanPhone = context.userPhone?.replace("whatsapp:", "").replace("+", "");
+      
+      const response = await fetch(`${RAILWAY_API}/traces/stats`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document_type: context.documentType,
+          user_phone: cleanPhone,
+        }),
+      });
+      
+      if (!response.ok) {
+        return { success: false, error: `Stats lookup failed: ${response.status}` };
+      }
+      
+      const data = await response.json();
+      return {
+        success: true,
+        totalAnalyzed: data.total_analyzed || data.total || 0,
+        outcomes: {
+          accepted: data.outcomes?.accepted || 0,
+          rejected: data.outcomes?.rejected || 0,
+          amended: data.outcomes?.amended || 0,
+          pending: data.outcomes?.pending || 0,
+        },
+        topRejectionReasons: data.top_rejection_reasons || data.topRejectionReasons || [],
+        acceptanceRate: data.acceptance_rate || data.acceptanceRate || 0,
+      };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+});
