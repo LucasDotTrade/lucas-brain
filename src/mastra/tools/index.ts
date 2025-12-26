@@ -1,7 +1,7 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
-const RAILWAY_API = "https://lucas-core-production.up.railway.app";
+const RAILWAY_API = process.env.RAILWAY_API || "https://lucas-core-production.up.railway.app";
 
 export const extractDocument = createTool({
   id: "extractDocument",
@@ -180,13 +180,13 @@ export const getOutcomeStats = createTool({
     try {
       const cleanPhone = context.userPhone?.replace("whatsapp:", "").replace("+", "");
       
-      const response = await fetch(`${RAILWAY_API}/traces/stats`, {
-        method: "POST",
+      const params = new URLSearchParams();
+      if (context.documentType) params.append("document_type", context.documentType);
+      if (cleanPhone) params.append("user_phone", cleanPhone);
+
+      const response = await fetch(`${RAILWAY_API}/traces/stats?${params}`, {
+        method: "GET",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document_type: context.documentType,
-          user_phone: cleanPhone,
-        }),
       });
       
       if (!response.ok) {
