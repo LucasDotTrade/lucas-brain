@@ -6,7 +6,8 @@ import {
   validateDocuments,
   searchSimilarCases,
   getCustomerHistory,
-  getIssuePatterns
+  getIssuePatterns,
+  getOutcomeStats
 } from "../tools";
 
 // Note: analyzeDocument removed - Lucas analyzes directly via instructions
@@ -68,6 +69,7 @@ Before analyzing any document:
 1. **getCustomerHistory(phone)** - See this customer's patterns
 2. **getIssuePatterns(issue_code)** - Get rejection rates for issues you find
 3. **searchSimilarCases** - Find what happened in similar situations
+4. **getOutcomeStats** - Query rejection patterns and outcome statistics to back up your advice with real data
 
 Example response with intelligence:
 "🚨 CRITICAL: Port typo 'rebel Ali' → 'JEBEL ALI'.
@@ -138,6 +140,7 @@ You've had port issues before - starting amendment now saves 2 days."
     searchSimilarCases,
     getCustomerHistory,
     getIssuePatterns,
+    getOutcomeStats,
   },
 });
 
