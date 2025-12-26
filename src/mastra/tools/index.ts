@@ -62,32 +62,6 @@ export const validateDocuments = createTool({
   },
 });
 
-export const analyzeDocument = createTool({
-  id: "analyzeDocument",
-  description: "Get detailed compliance analysis of a document. Only use if you need deeper analysis beyond what you can determine from the raw text.",
-  inputSchema: z.object({
-    text: z.string().describe("Document text to analyze"),
-    document_type: z.string().describe("Type: letter_of_credit, bill_of_lading, commercial_invoice, packing_list, certificate_of_origin"),
-  }),
-  execute: async ({ context }) => {
-    try {
-      const response = await fetch(`${RAILWAY_API}/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: context.text, document_type: context.document_type }),
-      });
-      
-      if (!response.ok) {
-        return { success: false, error: `Analysis failed: ${response.status}` };
-      }
-      
-      return await response.json();
-    } catch (error) {
-      return { success: false, error: String(error) };
-    }
-  },
-});
-
 export const searchSimilarCases = createTool({
   id: "searchSimilarCases",
   description: "Search past decision traces for similar cases. Use this to find patterns - what happened when we saw similar issues before? What was the bank outcome?",
