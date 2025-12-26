@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { PgStore } from "@mastra/pg";
+import { PostgresStore } from "@mastra/pg";
 import { 
   extractDocument, 
   validateDocuments,
@@ -11,7 +11,7 @@ import {
 
 // Note: analyzeDocument removed - Lucas analyzes directly via instructions
 
-const storage = new PgStore({
+const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL!,
 });
 
