@@ -1,8 +1,8 @@
 import { Mastra } from "@mastra/core";
-import { PgStore } from "@mastra/pg";
+import { PostgresStore } from "@mastra/pg";
 import { lucasAgent } from "./agents";
 
-const storage = new PgStore({
+const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL!,
 });
 
