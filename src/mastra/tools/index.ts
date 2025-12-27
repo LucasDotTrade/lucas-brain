@@ -62,26 +62,23 @@ export const validateDocuments = createTool({
   },
 });
 
-export const searchSimilarCases = createTool({
-  id: "searchSimilarCases",
-  description: "Search past decision traces for similar cases. Use this to find patterns - what happened when we saw similar issues before? What was the bank outcome?",
+export const searchPastCases = createTool({
+  id: "searchPastCases",
+  description: "Search past document analyses for similar issues or patterns. Use when you encounter a compliance issue and want historical context.",
   inputSchema: z.object({
-    document_type: z.string().optional().describe("Filter by document type: letter_of_credit, bill_of_lading, etc."),
-    issue_code: z.string().optional().describe("Filter by issue type: PORT_TYPO, MISSING_SHIPPED_ON_BOARD_DATE, LC_EXPIRED, etc."),
-    recommendation: z.string().optional().describe("Filter by Lucas recommendation: reject, review, approve"),
-    limit: z.number().default(10).describe("Max results to return"),
+    query: z.string().describe("Search term - issue type or keyword (e.g., 'beneficiary mismatch', 'port typo', 'amount')"),
+    outcome: z.string().optional().describe("Filter: 'accepted', 'rejected', or 'pending'"),
+    limit: z.number().optional().default(5).describe("Max results"),
   }),
   execute: async ({ context }) => {
     try {
-      const response = await fetch(`${RAILWAY_API}/traces/search`, {
-        method: "POST",
+      const params = new URLSearchParams({ q: context.query });
+      if (context.outcome) params.append("outcome", context.outcome);
+      if (context.limit) params.append("limit", context.limit.toString());
+      
+      const response = await fetch(`${RAILWAY_API}/traces/search?${params}`, {
+        method: "GET",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document_type: context.document_type,
-          issue_code: context.issue_code,
-          recommendation: context.recommendation,
-          limit: context.limit || 10,
-        }),
       });
       
       if (!response.ok) {
@@ -89,13 +86,7 @@ export const searchSimilarCases = createTool({
       }
       
       const data = await response.json();
-      return {
-        success: true,
-        total_matches: data.total,
-        cases: data.cases,
-        patterns: data.patterns,
-        summary: data.summary
-      };
+      return data;
     } catch (error) {
       return { success: false, error: String(error) };
     }
@@ -104,16 +95,15 @@ export const searchSimilarCases = createTool({
 
 export const getCustomerHistory = createTool({
   id: "getCustomerHistory",
-  description: "Get analysis history for a specific customer/phone. Shows past documents, issues found, patterns.",
+  description: "Get a customer's past document submissions and outcomes. Use to personalize response based on their experience level and past issues.",
   inputSchema: z.object({
-    phone: z.string().describe("Customer phone number"),
-    limit: z.number().default(20).describe("Max past analyses to return"),
+    userId: z.string().describe("Phone number or email of the customer"),
   }),
   execute: async ({ context }) => {
     try {
-      const cleanPhone = context.phone.replace("whatsapp:", "").replace("+", "");
+      const cleanUserId = context.userId.replace("whatsapp:", "").replace("+", "");
       
-      const response = await fetch(`${RAILWAY_API}/traces/customer/${cleanPhone}?limit=${context.limit || 20}`, {
+      const response = await fetch(`${RAILWAY_API}/traces/customer/${encodeURIComponent(cleanUserId)}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -123,13 +113,7 @@ export const getCustomerHistory = createTool({
       }
       
       const data = await response.json();
-      return {
-        success: true,
-        total_analyses: data.total,
-        recent_analyses: data.analyses,
-        common_issues: data.common_issues,
-        summary: data.summary
-      };
+      return data;
     } catch (error) {
       return { success: false, error: String(error) };
     }
@@ -138,13 +122,14 @@ export const getCustomerHistory = createTool({
 
 export const getIssuePatterns = createTool({
   id: "getIssuePatterns",
-  description: "Get patterns for a specific issue type. Shows how often it leads to rejection, common fixes, bank-specific behavior.",
+  description: "Get aggregate patterns about issue types and their rejection rates. Use to cite statistics and calibrate risk warnings.",
   inputSchema: z.object({
-    issue_code: z.string().describe("Issue code: PORT_TYPO, MISSING_SHIPPED_ON_BOARD_DATE, AMOUNT_MISMATCH, etc."),
+    days: z.number().optional().default(30).describe("Time window in days"),
   }),
   execute: async ({ context }) => {
     try {
-      const response = await fetch(`${RAILWAY_API}/traces/patterns/${context.issue_code}`, {
+      const days = context.days || 30;
+      const response = await fetch(`${RAILWAY_API}/traces/patterns?days=${days}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -154,15 +139,32 @@ export const getIssuePatterns = createTool({
       }
       
       const data = await response.json();
-      return {
-        success: true,
-        issue_code: context.issue_code,
-        total_occurrences: data.total,
-        rejection_rate: data.rejection_rate,
-        avg_resolution_days: data.avg_resolution_days,
-        common_fixes: data.common_fixes,
-        bank_specific: data.bank_patterns
-      };
+      return data;
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+});
+
+export const findSimilarCases = createTool({
+  id: "findSimilarCases",
+  description: "Find past cases similar to a specific trace. Use after analyzing a document to find historical evidence for your recommendations.",
+  inputSchema: z.object({
+    traceId: z.string().describe("UUID of the trace to find similar cases for"),
+  }),
+  execute: async ({ context }) => {
+    try {
+      const response = await fetch(`${RAILWAY_API}/traces/similar/${context.traceId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      
+      if (!response.ok) {
+        return { success: false, error: `Similar cases lookup failed: ${response.status}` };
+      }
+      
+      const data = await response.json();
+      return data;
     } catch (error) {
       return { success: false, error: String(error) };
     }
