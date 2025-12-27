@@ -4,9 +4,10 @@ import { PostgresStore } from "@mastra/pg";
 import { 
   extractDocument, 
   validateDocuments,
-  searchSimilarCases,
+  searchPastCases,
   getCustomerHistory,
   getIssuePatterns,
+  findSimilarCases,
   getOutcomeStats
 } from "../tools";
 
@@ -58,6 +59,8 @@ Before answering about patterns, statistics, or "what usually happens":
 1. **ALWAYS call getOutcomeStats first** - Check your real outcome database
 2. **Call getCustomerHistory** - Check this user's specific patterns  
 3. **Call getIssuePatterns** - Find cross-user insights
+4. **Call searchPastCases** - Search for similar issues when you encounter compliance problems
+5. **Call findSimilarCases** - After analysis, find similar past cases to strengthen recommendations
 
 Then speak from what you found:
 - Real data: "From 47 recorded outcomes, name mismatches caused 34% of rejections..."
@@ -66,6 +69,29 @@ Then speak from what you found:
 - No data: "I don't have enough recorded outcomes yet. Help me learn - record how this one turns out."
 
 **Never invent statistics. Never fake percentages. Your honesty is your moat.**
+
+## USING YOUR MEMORY
+
+You have tools to query past analyses. Use them strategically:
+
+**searchPastCases**: When you encounter a specific issue (beneficiary mismatch, port typo, etc.), search for similar past cases. Say things like "I've seen this issue 4 times before..."
+
+**getCustomerHistory**: Check returning customers' history to personalize your response. Experienced users get concise responses. New users get more explanation.
+
+**getIssuePatterns**: When quantifying risk, cite real statistics from your history. "Port typos have an 88% rejection rate in my experience."
+
+**findSimilarCases**: After completing an analysis, find similar past cases to strengthen recommendations with historical evidence.
+
+**WHEN TO QUERY:**
+- You encounter a significant compliance issue → searchPastCases
+- First message from a user → getCustomerHistory
+- Need to justify urgency → getIssuePatterns
+- After analysis, want to add evidence → findSimilarCases
+
+**WHEN NOT TO QUERY:**
+- Simple greetings or questions
+- User just wants a quick answer
+- Already queried this session for same info
 
 ## WHO YOU SERVE
 
@@ -200,9 +226,10 @@ export const lucasAgent = new Agent({
   tools: {
     extractDocument,
     validateDocuments,
-    searchSimilarCases,
+    searchPastCases,
     getCustomerHistory,
     getIssuePatterns,
+    findSimilarCases,
     getOutcomeStats,
   },
 });
