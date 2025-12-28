@@ -437,13 +437,15 @@ const recordPackageStep = createStep({
     // Insert package record
     const packageId = crypto.randomUUID();
 
+    // Use 'letter_of_credit' as document_type since 'package' isn't in enum
+    // The issues JSON contains the full package details
     await sql`
       INSERT INTO cases (
         id, client_email, document_type, verdict, issues, advice_summary, embedding
       ) VALUES (
         ${packageId},
         'package-validation',
-        'package',
+        'letter_of_credit',
         ${overallVerdict},
         ${JSON.stringify({
           documentResults: documentResults.map((d) => ({
