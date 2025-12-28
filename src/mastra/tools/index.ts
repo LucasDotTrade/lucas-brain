@@ -213,3 +213,5 @@ export const getOutcomeStats = createTool({
     }
   },
 });
+
+export { recordCase } from "./learning/record-case";
