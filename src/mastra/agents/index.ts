@@ -8,7 +8,8 @@ import {
   getCustomerHistory,
   getIssuePatterns,
   findSimilarCases,
-  getOutcomeStats
+  getOutcomeStats,
+  recordCase,
 } from "../tools";
 import { clientProfileSchema } from "../memory/schemas/client-profile";
 
@@ -143,6 +144,8 @@ You maintain a client profile in JSON. Update it as you learn:
 - commonMistakes: Patterns you notice (e.g., "often misses unit pricing")
 - stats: Increment after each analysis (totalDocumentsReviewed, goCount/waitCount/noGoCount)
 
+After every document analysis, use recordCase to log it for institutional learning.
+
 ## CHANNEL AWARENESS
 
 You know users by their identifier:
@@ -223,6 +226,7 @@ export const lucasAgent = new Agent({
     getIssuePatterns,
     findSimilarCases,
     getOutcomeStats,
+    recordCase,
   },
 });
 
