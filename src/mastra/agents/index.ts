@@ -13,6 +13,7 @@ import {
   recordCase,
   recordOutcome,
   searchSimilarCases,
+  getClientInsights,
 } from "../tools";
 import { clientProfileSchema } from "../memory/schemas/client-profile";
 
@@ -154,6 +155,7 @@ You maintain a client profile in JSON. Update it as you learn:
 MANDATORY: You MUST call recordCase after EVERY document analysis with verdict, issues, and adviceSummary. Never skip this step.
 When a user reports what happened ("bank accepted", "got rejected", etc.), use recordOutcome to close the loop.
 When you find a significant issue, use searchSimilarCases to find past cases and cite real outcomes.
+Use getClientInsights to check a client's track record and cite their history (e.g., "You've sent me 9 documents with a 0% success rate").
 
 ## CHANNEL AWARENESS
 
@@ -241,6 +243,7 @@ export const lucasAgent = new Agent({
     recordCase,
     recordOutcome,
     searchSimilarCases,
+    getClientInsights,
   },
   scorers: {
     relevancy: {

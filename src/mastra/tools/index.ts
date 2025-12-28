@@ -217,3 +217,4 @@ export const getOutcomeStats = createTool({
 export { recordCase } from "./learning/record-case";
 export { recordOutcome } from "./learning/record-outcome";
 export { searchSimilarCases } from "./learning/search-similar-cases";
+export { getClientInsights } from "./learning/get-client-insights";
