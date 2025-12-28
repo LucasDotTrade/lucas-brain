@@ -47,10 +47,10 @@ const lucasMemory = new Memory({
       template: workingMemoryTemplate,
     },
     semanticRecall: {
-      topK: 3,
+      topK: 2,
       messageRange: 2,
     },
-    lastMessages: 8,
+    lastMessages: 4,
   },
 });
 
