@@ -1,8 +1,8 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
-import { 
-  extractDocument, 
+import {
+  extractDocument,
   validateDocuments,
   searchPastCases,
   getCustomerHistory,
@@ -10,12 +10,17 @@ import {
   findSimilarCases,
   getOutcomeStats
 } from "../tools";
+import { clientProfileSchema } from "../memory/schemas/client-profile";
 
 // Note: analyzeDocument removed - Lucas analyzes directly via instructions
 
 const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL!,
 });
+
+// Generate default template from schema
+const defaultProfile = clientProfileSchema.parse({});
+const workingMemoryTemplate = JSON.stringify(defaultProfile, null, 2);
 
 const lucasMemory = new Memory({
   storage,
@@ -24,17 +29,7 @@ const lucasMemory = new Memory({
     workingMemory: {
       enabled: true,
       scope: "resource",
-      template: `# Client Profile
-- **Phone**: 
-- **Company**: 
-- **Industry**: 
-- **Products Traded**: 
-- **Trade Routes**: 
-- **Banks**: 
-- **Documents This Session**: []
-- **Past Issues**: []
-- **Risk Notes**: 
-`,
+      template: workingMemoryTemplate,
     },
   },
 });
