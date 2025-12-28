@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { PostgresStore } from "@mastra/pg";
+import { PostgresStore, PgVector } from "@mastra/pg";
 import { createAnswerRelevancyScorer, createHallucinationScorer } from "@mastra/evals/scorers/llm";
 import {
   UnicodeNormalizer,
@@ -28,12 +28,18 @@ const storage = new PostgresStore({
   connectionString: process.env.DATABASE_URL!,
 });
 
+const vectorStore = new PgVector({
+  connectionString: process.env.DATABASE_URL!,
+});
+
 // Generate default template from schema
 const defaultProfile = clientProfileSchema.parse({});
 const workingMemoryTemplate = JSON.stringify(defaultProfile, null, 2);
 
 const lucasMemory = new Memory({
   storage,
+  vector: vectorStore,
+  embedder: "openai/text-embedding-3-small",
   options: {
     workingMemory: {
       enabled: true,
