@@ -1,5 +1,8 @@
 import { createTool } from "@mastra/core/tools";
+import postgres from "postgres";
 import { z } from "zod";
+
+const sql = postgres(process.env.DATABASE_URL!);
 
 export const recordCase = createTool({
   id: "recordCase",
@@ -21,12 +24,30 @@ export const recordCase = createTool({
     message: z.string(),
   }),
   execute: async ({ context }) => {
-    // For now, just log - we'll connect to Supabase next
-    console.log("📊 Recording case:", context);
-    return {
-      success: true,
-      caseId: crypto.randomUUID(),
-      message: `Case recorded for ${context.clientEmail}`,
-    };
+    try {
+      const [row] = await sql`
+        insert into cases (client_email, document_type, verdict, issues, advice_summary)
+        values (
+          ${context.clientEmail},
+          ${context.documentType},
+          ${context.verdict},
+          ${JSON.stringify(context.issues)},
+          ${context.adviceSummary}
+        )
+        returning id
+      `;
+
+      return {
+        success: true,
+        caseId: row.id,
+        message: `Case recorded for ${context.clientEmail}`,
+      };
+    } catch (err) {
+      console.error("❌ recordCase error:", err);
+      return {
+        success: false,
+        message: `Error: ${String(err)}`,
+      };
+    }
   },
 });
