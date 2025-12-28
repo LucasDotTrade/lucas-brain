@@ -10,6 +10,7 @@ import {
   findSimilarCases,
   getOutcomeStats,
   recordCase,
+  recordOutcome,
 } from "../tools";
 import { clientProfileSchema } from "../memory/schemas/client-profile";
 
@@ -227,6 +228,7 @@ export const lucasAgent = new Agent({
     findSimilarCases,
     getOutcomeStats,
     recordCase,
+    recordOutcome,
   },
 });
 
