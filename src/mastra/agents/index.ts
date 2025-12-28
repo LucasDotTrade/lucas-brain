@@ -3,6 +3,11 @@ import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
 import { createAnswerRelevancyScorer, createHallucinationScorer } from "@mastra/evals/scorers/llm";
 import {
+  UnicodeNormalizer,
+  LanguageDetector,
+  PIIDetector,
+} from "@mastra/core/processors";
+import {
   extractDocument,
   validateDocuments,
   searchPastCases,
@@ -227,11 +232,37 @@ This isn't something you claim. It's something you demonstrate through specific,
 // Scorers for auto-evaluating response quality
 const scorerModel = "openai/gpt-4o-mini";
 
+// Input/output processors for guardrails
+const inputProcessors = [
+  new UnicodeNormalizer({
+    stripControlChars: true,
+    collapseWhitespace: true,
+  }),
+  new LanguageDetector({
+    model: "openai/gpt-4o-mini",
+    targetLanguages: ["English", "en"],
+    strategy: "translate",
+    threshold: 0.8,
+  }),
+];
+
+const outputProcessors = [
+  new PIIDetector({
+    model: "openai/gpt-4o-mini",
+    threshold: 0.7,
+    strategy: "redact",
+    redactionMethod: "mask",
+    detectionTypes: ["credit-card", "ssn"],
+  }),
+];
+
 export const lucasAgent = new Agent({
   name: "Lucas",
   instructions,
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
+  inputProcessors,
+  outputProcessors,
   tools: {
     extractDocument,
     validateDocuments,
