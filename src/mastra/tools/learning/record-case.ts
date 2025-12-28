@@ -1,8 +1,10 @@
 import { createTool } from "@mastra/core/tools";
+import OpenAI from "openai";
 import postgres from "postgres";
 import { z } from "zod";
 
 const sql = postgres(process.env.DATABASE_URL!);
+const openai = new OpenAI();
 
 export const recordCase = createTool({
   id: "recordCase",
@@ -25,16 +27,30 @@ export const recordCase = createTool({
   }),
   execute: async ({ context }) => {
     try {
+      // Create text for embedding: combine issues and advice
+      const issuesText = context.issues
+        .map(i => `${i.type}: ${i.description}`)
+        .join(". ");
+      const embeddingText = `${context.documentType}. ${issuesText}. ${context.adviceSummary}`;
+
+      // Generate embedding
+      const embeddingResponse = await openai.embeddings.create({
+        model: "text-embedding-3-small",
+        input: embeddingText,
+      });
+      const embedding = embeddingResponse.data[0].embedding;
+
       const [row] = await sql`
-        insert into cases (client_email, document_type, verdict, issues, advice_summary)
-        values (
+        INSERT INTO cases (client_email, document_type, verdict, issues, advice_summary, embedding)
+        VALUES (
           ${context.clientEmail},
           ${context.documentType},
           ${context.verdict},
           ${JSON.stringify(context.issues)},
-          ${context.adviceSummary}
+          ${context.adviceSummary},
+          ${JSON.stringify(embedding)}::vector
         )
-        returning id
+        RETURNING id
       `;
 
       return {
