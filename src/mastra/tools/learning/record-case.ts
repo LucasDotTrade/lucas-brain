@@ -26,6 +26,13 @@ export const recordCase = createTool({
     message: z.string(),
   }),
   execute: async ({ context }) => {
+    console.log("📊 recordCase called:", {
+      clientEmail: context.clientEmail,
+      documentType: context.documentType,
+      verdict: context.verdict,
+      issuesCount: context.issues.length,
+    });
+
     try {
       // Create text for embedding: combine issues and advice
       const issuesText = context.issues
@@ -33,25 +40,48 @@ export const recordCase = createTool({
         .join(". ");
       const embeddingText = `${context.documentType}. ${issuesText}. ${context.adviceSummary}`;
 
-      // Generate embedding
-      const embeddingResponse = await openai.embeddings.create({
-        model: "text-embedding-3-small",
-        input: embeddingText,
-      });
-      const embedding = embeddingResponse.data[0].embedding;
+      // Try to generate embedding, but don't fail if it doesn't work
+      let embedding: number[] | null = null;
+      try {
+        console.log("🔍 Generating embedding for:", embeddingText.substring(0, 100) + "...");
+        const embeddingResponse = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: embeddingText,
+        });
+        embedding = embeddingResponse.data[0].embedding;
+        console.log("✅ Embedding generated:", embedding.length, "dimensions");
+      } catch (embeddingErr) {
+        console.error("⚠️ Embedding failed (will insert without):", embeddingErr);
+        // Continue without embedding
+      }
 
-      const [row] = await sql`
-        INSERT INTO cases (client_email, document_type, verdict, issues, advice_summary, embedding)
-        VALUES (
-          ${context.clientEmail},
-          ${context.documentType},
-          ${context.verdict},
-          ${JSON.stringify(context.issues)},
-          ${context.adviceSummary},
-          ${JSON.stringify(embedding)}::vector
-        )
-        RETURNING id
-      `;
+      // Insert with or without embedding
+      const [row] = embedding
+        ? await sql`
+            INSERT INTO cases (client_email, document_type, verdict, issues, advice_summary, embedding)
+            VALUES (
+              ${context.clientEmail},
+              ${context.documentType},
+              ${context.verdict},
+              ${JSON.stringify(context.issues)},
+              ${context.adviceSummary},
+              ${JSON.stringify(embedding)}::vector
+            )
+            RETURNING id
+          `
+        : await sql`
+            INSERT INTO cases (client_email, document_type, verdict, issues, advice_summary)
+            VALUES (
+              ${context.clientEmail},
+              ${context.documentType},
+              ${context.verdict},
+              ${JSON.stringify(context.issues)},
+              ${context.adviceSummary}
+            )
+            RETURNING id
+          `;
+
+      console.log("✅ Case recorded:", row.id, embedding ? "(with embedding)" : "(without embedding)");
 
       return {
         success: true,
