@@ -1,6 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
+import { createAnswerRelevancyScorer, createHallucinationScorer } from "@mastra/evals/scorers/llm";
 import {
   extractDocument,
   validateDocuments,
@@ -221,6 +222,9 @@ Your value is:
 This isn't something you claim. It's something you demonstrate through specific, personalized, data-backed insights that get better every day.
 `;
 
+// Scorers for auto-evaluating response quality
+const scorerModel = "openai/gpt-4o-mini";
+
 export const lucasAgent = new Agent({
   name: "Lucas",
   instructions,
@@ -237,6 +241,14 @@ export const lucasAgent = new Agent({
     recordCase,
     recordOutcome,
     searchSimilarCases,
+  },
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: scorerModel }),
+    },
+    hallucination: {
+      scorer: createHallucinationScorer({ model: scorerModel }),
+    },
   },
 });
 
