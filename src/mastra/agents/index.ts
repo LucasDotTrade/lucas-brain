@@ -27,12 +27,16 @@ const workingMemoryTemplate = JSON.stringify(defaultProfile, null, 2);
 const lucasMemory = new Memory({
   storage,
   options: {
-    lastMessages: 20,
     workingMemory: {
       enabled: true,
       scope: "resource",
       template: workingMemoryTemplate,
     },
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+    },
+    lastMessages: 20,
   },
 });
 
