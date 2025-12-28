@@ -55,9 +55,12 @@ const analyzeStep = createStep({
       throw new Error("Lucas agent not found");
     }
 
+    // Generate a thread ID for this workflow run
+    const threadId = `workflow-${Date.now()}-${inputData.clientEmail}`;
+
     const response = await lucas.generate(
       `Analyze this ${inputData.documentType}:\n\n${inputData.documentText}`,
-      { resourceId: inputData.clientEmail }
+      { resourceId: inputData.clientEmail, threadId }
     );
 
     // Parse verdict from response (simplified - in real use, use structured output)
