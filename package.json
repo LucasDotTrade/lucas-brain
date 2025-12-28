@@ -20,6 +20,8 @@
     "@mastra/loggers": "latest",
     "@mastra/memory": "^0.15.13",
     "@mastra/pg": "^0.17.10",
+    "@supabase/supabase-js": "^2.89.0",
+    "postgres": "^3.4.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
