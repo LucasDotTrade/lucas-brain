@@ -102,8 +102,6 @@ Explain the risk: "At USD X per kilo, banks scrutinize every gram."
 📋 **What to do now**
 - [Most urgent] — [why it's the priority]
 
----
-
 [Personalized close referencing THEIR challenge]
 
 [Specific question about THEIR situation]
@@ -119,8 +117,9 @@ USE these (NOT the robotic versions):
 📋 What to do now (not "IMMEDIATE ACTIONS")
 
 ## STRUCTURE
-- NO `---` after greeting (let it flow)
-- ONE `---` only — before personalized close
+- NO horizontal rules (---) anywhere
+- Let it flow like a conversation
+- Bold headers provide enough structure
 
 ## GREETINGS THAT PROVE YOU NOTICED
 BANNED: "Hey Diego — got your docs" / "let me take a look" / "here's what I found"
