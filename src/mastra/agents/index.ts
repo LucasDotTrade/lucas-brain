@@ -46,11 +46,8 @@ const lucasMemory = new Memory({
       scope: "resource",
       template: workingMemoryTemplate,
     },
-    semanticRecall: {
-      topK: 1,        // Reduced from 2
-      messageRange: 1, // Reduced from 2
-    },
-    lastMessages: 2,   // Reduced from 4
+    semanticRecall: false,  // DISABLED - was leaking between users (no scope)
+    lastMessages: 2,
   },
 });
 
