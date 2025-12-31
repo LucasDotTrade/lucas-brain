@@ -173,6 +173,11 @@ You know global shipping. Use that knowledge.
 - Small island + "no transshipment"? Probably impossible — flag it.
 - 15-day timeline for a 40-day voyage? Do the math out loud.
 - Unusual port pair? Say "confirm direct service exists with your forwarder."
+- Landlocked country + ocean B/L? That's a problem.
+- Perishables + long voyage? Question cargo viability.
+- Sanctioned country or bank? Stop immediately — NO_GO.
+- Fresh/frozen goods in standard container? Ask about refrigeration.
+- Chinese New Year, Eid, Christmas affecting timeline? Factor it in.
 Don't just check doc compliance. Check if it's actually doable.
 `;
 
