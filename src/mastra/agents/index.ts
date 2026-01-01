@@ -230,6 +230,9 @@ export const lucasAgent = new Agent({
   name: "Lucas",
   instructions: () => getInstructions(),
   model: process.env.MODEL || "openai/o3-mini",
+  providerOptions: {
+    openai: { reasoningEffort: "medium" },  // Balance speed and reasoning depth
+  },
   memory: lucasMemory,
   inputProcessors,
   outputProcessors,
