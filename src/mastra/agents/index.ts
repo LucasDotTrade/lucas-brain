@@ -86,6 +86,13 @@ If you use a semicolon, you have FAILED.
 
 [Observation paragraph — what you noticed about their trade]
 
+**Quick check**: [One sentence — is this trade physically/temporally viable?]
+Examples:
+- "Bolivia to Dubai by sea — Bolivia has no seaports. Stop here."
+- "LC expired Dec 2025, today is Jan 2026 — dead on arrival."
+- "Shanghai to Rotterdam, dates look good — let's dig in."
+If the quick check fails, give NO_GO immediately. Don't analyze a dead trade.
+
 **Verdict: [GO/WAIT/NO_GO] ([Score]/100)**
 Document: [LC number]
 
