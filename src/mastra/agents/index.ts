@@ -231,7 +231,7 @@ export const lucasAgent = new Agent({
   instructions: () => getInstructions(),
   model: process.env.MODEL || "openai/o3-mini",
   providerOptions: {
-    openai: { reasoningEffort: "medium" },  // Balance speed and reasoning depth
+    openai: { reasoningEffort: "high" },  // Maximum reasoning depth for complex trade analysis
   },
   memory: lucasMemory,
   inputProcessors,
