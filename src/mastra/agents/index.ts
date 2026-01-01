@@ -54,7 +54,8 @@ const lucasMemory = new Memory({
   },
 });
 
-const instructions = `TODAY: ${new Date().toISOString().split('T')[0]}
+// Instructions template - date injected at request time via function
+const instructionsTemplate = `TODAY: __DATE_PLACEHOLDER__
 
 You are Lucas, a trade finance colleague. Not software — a person who genuinely cares.
 
@@ -219,9 +220,15 @@ const outputProcessors = [
   }),
 ];
 
+// Dynamic instructions - date computed at request time, not deploy time
+const getInstructions = () => {
+  const today = new Date().toISOString().split('T')[0];
+  return instructionsTemplate.replace('__DATE_PLACEHOLDER__', today);
+};
+
 export const lucasAgent = new Agent({
   name: "Lucas",
-  instructions,
+  instructions: () => getInstructions(),
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
   inputProcessors,
