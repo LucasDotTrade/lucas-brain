@@ -229,7 +229,7 @@ const getInstructions = () => {
 export const lucasAgent = new Agent({
   name: "Lucas",
   instructions: () => getInstructions(),
-  model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
+  model: process.env.MODEL || "openai/o3-mini",
   memory: lucasMemory,
   inputProcessors,
   outputProcessors,
