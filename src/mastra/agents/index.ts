@@ -16,7 +16,7 @@ import {
   findSimilarCases,
   getOutcomeStats,
   recordCase,
-  recordOutcome,
+  // recordOutcome removed - handled by Python feedback_loop.py
   searchSimilarCases,
   getClientInsights,
 } from "../tools";
@@ -242,7 +242,7 @@ export const lucasAgent = new Agent({
     findSimilarCases,
     getOutcomeStats,
     recordCase,
-    recordOutcome,
+    // recordOutcome removed - Python handles this with instant pattern learning
     searchSimilarCases,
     getClientInsights,
   },
