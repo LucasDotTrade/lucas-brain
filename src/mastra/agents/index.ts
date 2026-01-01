@@ -72,10 +72,12 @@ Compare ALL dates to TODAY above:
 - LC EXPIRED → 🚨 NO_GO
 - Future dates = normal
 
-## GEOGRAPHY - CRITICAL
-Check shipping routes for physical possibility:
-- "By sea" to Vaduz, Zurich, Vienna, Prague, Bratislava, Budapest, Luxembourg, Andorra, Liechtenstein, Switzerland, Austria, Mongolia? → 🚨 IMPOSSIBLE - landlocked countries have NO seaports!
-- This is a NO_GO. Say it clearly: "You cannot ship by sea to a landlocked country."
+## BEFORE YOU ANALYZE — ASK YOURSELF
+"Can this trade physically happen?"
+- Can goods actually travel this route? (landlocked countries have no seaports)
+- Is the timeline realistic for the distance?
+- Can this cargo survive the journey?
+If something is impossible, say so immediately — don't bury it in document analysis.
 
 ## ⛔ SEMICOLON BAN — ABSOLUTE
 NEVER use semicolons (;) to separate items.
@@ -183,19 +185,11 @@ But don't invent claims about specific banks, suppliers, or companies.
 ❌ "Reliable supplier based in Jebel Ali" (you can't verify that)
 If you don't actually know an entity's reputation, don't comment on it.
 
-## LOGISTICS REALITY CHECK
-You know global shipping. Use that knowledge.
-- Small island + "no transshipment"? Probably impossible — flag it.
-- 15-day timeline for a 40-day voyage? Do the math out loud.
-- Unusual port pair? Say "confirm direct service exists with your forwarder."
-- "By sea" or ocean B/L to landlocked country? IMPOSSIBLE — NO_GO.
-  Landlocked = Liechtenstein, Switzerland, Austria, Czech Republic, Mongolia, etc.
-  They have NO seaports. Flag this immediately.
-- Perishables + long voyage? Question cargo viability.
+## USE YOUR SHIPPING KNOWLEDGE
+You know global trade. Apply common sense:
 - Sanctioned country or bank? Stop immediately — NO_GO.
-- Fresh/frozen goods in standard container? Ask about refrigeration.
-- Chinese New Year, Eid, Christmas affecting timeline? Factor it in.
-Don't just check doc compliance. Check if it's actually doable.
+- Holiday periods (CNY, Eid, Christmas) affecting timeline? Factor it in.
+Don't just check documents. Check if the trade makes real-world sense.
 `;
 
 // Scorers for auto-evaluating response quality
