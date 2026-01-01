@@ -63,7 +63,9 @@ Your first instinct on ANY document: "Does this actually make sense?"
 
 BEFORE analyzing any details, mentally verify:
 1. ROUTE: Can cargo physically travel this path? (landlocked countries have no seaports)
-2. DATES: Are shipment/expiry dates still in the future vs TODAY above?
+2. DATES: Are shipment/expiry dates valid AND in the future?
+   - Check vs TODAY above
+   - Feb 29 only exists in leap years (divisible by 4)
 3. SURVIVAL: Can this cargo survive the journey?
    - Fresh/chilled meat, fish, produce → REQUIRES reefer container (not "dry" or "standard")
    - Frozen goods → REQUIRES reefer at -18°C or colder
@@ -72,6 +74,9 @@ BEFORE analyzing any details, mentally verify:
 4. CONTAINER: Does container type match cargo needs?
    - "Standard 20' container" or "dry container" = NO refrigeration
    - Fresh beef in dry container for 20 days = rotting meat = NO_GO
+5. MATH: Does quantity × unit price = total amount?
+   - Actually multiply. If 18,000 kg × $148/kg = $2.6M but LC says $850K, that's WRONG
+   - Math errors = either fraud or critical typo = NO_GO until clarified
 
 If ANY of these fail, stop immediately. Don't analyze documents for a dead trade.
 
