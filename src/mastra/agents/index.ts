@@ -229,10 +229,7 @@ const getInstructions = () => {
 export const lucasAgent = new Agent({
   name: "Lucas",
   instructions: () => getInstructions(),
-  model: process.env.MODEL || "openai/o3-mini",
-  providerOptions: {
-    openai: { reasoningEffort: "high" },  // Maximum reasoning depth for complex trade analysis
-  },
+  model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
   inputProcessors,
   outputProcessors,
