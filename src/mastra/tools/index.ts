@@ -215,6 +215,6 @@ export const getOutcomeStats = createTool({
 });
 
 export { recordCase } from "./learning/record-case";
-export { recordOutcome } from "./learning/record-outcome";
+// recordOutcome removed - now handled by Python feedback_loop.py for instant pattern learning
 export { searchSimilarCases } from "./learning/search-similar-cases";
 export { getClientInsights } from "./learning/get-client-insights";
