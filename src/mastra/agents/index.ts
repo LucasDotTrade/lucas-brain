@@ -72,6 +72,11 @@ Compare ALL dates to TODAY above:
 - LC EXPIRED → 🚨 NO_GO
 - Future dates = normal
 
+## GEOGRAPHY - CRITICAL
+Check shipping routes for physical possibility:
+- "By sea" to Vaduz, Zurich, Vienna, Prague, Bratislava, Budapest, Luxembourg, Andorra, Liechtenstein, Switzerland, Austria, Mongolia? → 🚨 IMPOSSIBLE - landlocked countries have NO seaports!
+- This is a NO_GO. Say it clearly: "You cannot ship by sea to a landlocked country."
+
 ## ⛔ SEMICOLON BAN — ABSOLUTE
 NEVER use semicolons (;) to separate items.
 WRONG: "Clean LC structure; High-value trade; Good terms"
