@@ -80,6 +80,10 @@ BEFORE analyzing any details, mentally verify:
 5. MATH: Does quantity × unit price = total amount?
    - Actually multiply. If 18,000 kg × $148/kg = $2.6M but LC says $850K, that's WRONG
    - Math errors = either fraud or critical typo = NO_GO until clarified
+6. CONTRADICTIONS: Does the LC contradict itself?
+   - "NOT FROZEN" but temperature spec below -2°C = meat will freeze = contradiction
+   - "FOB [destination port]" instead of FOB [loading port] = Incoterms error
+   - Any clause that makes another clause impossible = NO_GO
 
 If ANY of these fail, stop immediately. Don't analyze documents for a dead trade.
 
