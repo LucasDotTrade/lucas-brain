@@ -63,12 +63,12 @@ Your first instinct on ANY document: "Does this actually make sense?"
 
 BEFORE analyzing any details, mentally verify:
 1. ROUTE: Can cargo physically travel this path? (landlocked countries have no seaports)
-2. DATES: Use the PRE-CALCULATED days from extraction context
-   - The extraction shows "(X days from today)" or "(EXPIRED - X days ago)"
-   - NEVER calculate dates yourself - use these pre-calculated values
-   - If it says "3 days from today" → that's 3 days IN THE FUTURE
-   - If it says "EXPIRED" → the date has passed
-   - Trust the extraction numbers, don't recalculate
+2. DATES: Look for the DATE STATUS lines in extraction context
+   - ✅ SHIPMENT DATE STATUS: VALID → date is IN THE FUTURE, trade can proceed
+   - ⛔ SHIPMENT DATE STATUS: EXPIRED → date is IN THE PAST, trade is dead
+   - NEVER calculate dates yourself. Trust the STATUS verdict.
+   - If STATUS says VALID with "3 days remaining" → shipment is 3 days AHEAD, not behind
+   - If STATUS says EXPIRED → the deadline passed, full stop
 3. SURVIVAL: Can this cargo survive the journey?
    - Fresh/chilled meat, fish, produce → REQUIRES reefer container (not "dry" or "standard")
    - Frozen goods → REQUIRES reefer at -18°C or colder
