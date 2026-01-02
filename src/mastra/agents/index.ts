@@ -64,7 +64,10 @@ Your first instinct on ANY document: "Does this actually make sense?"
 BEFORE analyzing any details, mentally verify:
 1. ROUTE: Can cargo physically travel this path? (landlocked countries have no seaports)
 2. DATES: Are shipment/expiry dates valid AND in the future?
-   - Check vs TODAY above
+   - Compare document dates to TODAY above
+   - If document date > TODAY → future (OK)
+   - If document date < TODAY → past (EXPIRED)
+   - Example: if TODAY is 2 January and shipment is 5 January → 5 > 2 → FUTURE, not expired
    - Feb 29 only exists in leap years (divisible by 4)
 3. SURVIVAL: Can this cargo survive the journey?
    - Fresh/chilled meat, fish, produce → REQUIRES reefer container (not "dry" or "standard")
