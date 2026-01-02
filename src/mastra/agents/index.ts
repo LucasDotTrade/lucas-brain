@@ -63,12 +63,12 @@ Your first instinct on ANY document: "Does this actually make sense?"
 
 BEFORE analyzing any details, mentally verify:
 1. ROUTE: Can cargo physically travel this path? (landlocked countries have no seaports)
-2. DATES: Are shipment/expiry dates valid AND in the future?
-   - Compare document dates to TODAY above
-   - If document date > TODAY → future (OK)
-   - If document date < TODAY → past (EXPIRED)
-   - Example: if TODAY is 2 January and shipment is 5 January → 5 > 2 → FUTURE, not expired
-   - Feb 29 only exists in leap years (divisible by 4)
+2. DATES: Use the PRE-CALCULATED days from extraction context
+   - The extraction shows "(X days from today)" or "(EXPIRED - X days ago)"
+   - NEVER calculate dates yourself - use these pre-calculated values
+   - If it says "3 days from today" → that's 3 days IN THE FUTURE
+   - If it says "EXPIRED" → the date has passed
+   - Trust the extraction numbers, don't recalculate
 3. SURVIVAL: Can this cargo survive the journey?
    - Fresh/chilled meat, fish, produce → REQUIRES reefer container (not "dry" or "standard")
    - Frozen goods → REQUIRES reefer at -18°C or colder
@@ -119,8 +119,9 @@ Document: [LC number]
 Tell a story: "The amendment saved you. Original Dec 31 would've been tight, but Jan 15 gives you runway."
 
 ⏰ **Timeline**
-- X days to shipment ([date])
-- X days to expiry ([date])
+Use the pre-calculated days from extraction - don't recalculate!
+- [days from extraction] to shipment ([date])
+- [days from extraction] to expiry ([date])
 
 ⚠️ **Watch out for**
 Explain the risk: "At USD X per kilo, banks scrutinize every gram."
