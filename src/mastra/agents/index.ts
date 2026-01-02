@@ -1,12 +1,8 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore, PgVector } from "@mastra/pg";
-import { createAnswerRelevancyScorer, createHallucinationScorer } from "@mastra/evals/scorers/llm";
-import {
-  UnicodeNormalizer,
-  LanguageDetector,
-  PIIDetector,
-} from "@mastra/core/processors";
+// Scorers and processors removed - each adds an LLM call per request
+// Re-enable for eval runs, not production
 import {
   extractDocument,
   validateDocuments,
@@ -198,32 +194,10 @@ If you don't actually know an entity's reputation, don't comment on it.
 - Physically impossible route (landlocked + sea, wrong container for cargo)
 `;
 
-// Scorers for auto-evaluating response quality
-const scorerModel = "openai/gpt-4o-mini";
-
-// Input/output processors for guardrails
-const inputProcessors = [
-  new UnicodeNormalizer({
-    stripControlChars: true,
-    collapseWhitespace: true,
-  }),
-  new LanguageDetector({
-    model: "openai/gpt-4o-mini",
-    targetLanguages: ["English", "en"],
-    strategy: "translate",
-    threshold: 0.8,
-  }),
-];
-
-const outputProcessors = [
-  new PIIDetector({
-    model: "openai/gpt-4o-mini",
-    threshold: 0.7,
-    strategy: "redact",
-    redactionMethod: "mask",
-    detectionTypes: ["credit-card", "ssn"],
-  }),
-];
+// Processors and scorers removed for production - each was an extra LLM call
+// To re-enable for eval:
+// - Import from "@mastra/core/processors" and "@mastra/evals/scorers/llm"
+// - Add inputProcessors, outputProcessors, scorers to Agent config
 
 // Dynamic instructions - date computed at request time, not deploy time
 const getInstructions = () => {
@@ -240,8 +214,6 @@ export const lucasAgent = new Agent({
   instructions: () => getInstructions(),
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
-  inputProcessors,
-  outputProcessors,
   tools: {
     extractDocument,
     validateDocuments,
@@ -254,14 +226,6 @@ export const lucasAgent = new Agent({
     // recordOutcome removed - Python handles this with instant pattern learning
     searchSimilarCases,
     getClientInsights,
-  },
-  scorers: {
-    relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: scorerModel }),
-    },
-    hallucination: {
-      scorer: createHallucinationScorer({ model: scorerModel }),
-    },
   },
 });
 
