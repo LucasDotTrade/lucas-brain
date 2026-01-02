@@ -238,7 +238,11 @@ const outputProcessors = [
 
 // Dynamic instructions - date computed at request time, not deploy time
 const getInstructions = () => {
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const day = now.getDate();
+  const month = now.toLocaleString('en-US', { month: 'long' });
+  const year = now.getFullYear();
+  const today = `${day} ${month} ${year}`;  // e.g., "2 January 2026"
   return instructionsTemplate.replace('__DATE_PLACEHOLDER__', today);
 };
 
