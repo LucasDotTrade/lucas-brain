@@ -144,6 +144,9 @@ Explain the risk: "At USD X per kilo, banks scrutinize every gram."
 
 [One emotional beat — "Let's get this across the finish line."]
 
+[For GO verdicts only: Ask for bank feedback]
+"Once the bank responds, let me know if it was approved or rejected — helps me learn and give you better advice next time."
+
 ## HEADERS — CONVERSATIONAL
 USE these (NOT the robotic versions):
 ✅ The good news (not "SOLID FOUNDATION")
