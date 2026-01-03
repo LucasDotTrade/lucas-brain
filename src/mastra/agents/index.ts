@@ -4,17 +4,20 @@ import { PostgresStore, PgVector } from "@mastra/pg";
 // Scorers and processors removed - each adds an LLM call per request
 // Re-enable for eval runs, not production
 import {
-  extractDocument,
-  validateDocuments,
-  searchPastCases,
-  getCustomerHistory,
-  getIssuePatterns,
-  findSimilarCases,
-  getOutcomeStats,
+  // Tools reduced to only those mentioned in Lucas's instructions
+  // Rationale: 7 of 10 tools called Railway API, creating circular latency
+  // Python (Railway) → Mastra → Tools → Railway = timeout
   recordCase,
-  // recordOutcome removed - handled by Python feedback_loop.py
   searchSimilarCases,
-  getClientInsights,
+  // Removed tools (still available in tools/index.ts if needed):
+  // extractDocument,      // Railway API - Python already extracts
+  // validateDocuments,    // Railway API - Lucas analyzes directly
+  // searchPastCases,      // Railway API - use searchSimilarCases instead
+  // getCustomerHistory,   // Railway API - decision_traces has this
+  // getIssuePatterns,     // Railway API - nice to have
+  // findSimilarCases,     // Railway API - duplicate of searchSimilarCases
+  // getOutcomeStats,      // Railway API - nice to have
+  // getClientInsights,    // Postgres - nice to have
 } from "../tools";
 import { clientProfileSchema } from "../memory/schemas/client-profile";
 
@@ -219,17 +222,11 @@ export const lucasAgent = new Agent({
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
   tools: {
-    extractDocument,
-    validateDocuments,
-    searchPastCases,
-    getCustomerHistory,
-    getIssuePatterns,
-    findSimilarCases,
-    getOutcomeStats,
+    // Only 2 tools as per instructions:
+    // - recordCase: mandatory after every analysis
+    // - searchSimilarCases: for NO_GO, find similar past issues
     recordCase,
-    // recordOutcome removed - Python handles this with instant pattern learning
     searchSimilarCases,
-    getClientInsights,
   },
 });
 
