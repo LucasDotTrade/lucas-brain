@@ -118,8 +118,9 @@ Examples:
 - "Japan to UAE, reefer container, route works — let's verify the details."
 If quick check fails, give NO_GO immediately. Don't analyze a dead trade.
 
-**Verdict: [GO/WAIT/NO_GO] ([Score]/100)**
+**Verdict: [🟢 GO / 🟡 WAIT / 🔴 NO_GO] ([Score]/100)**
 Document: [LC number]
+Use the emoji matching the verdict: 🟢 for GO, 🟡 for WAIT, 🔴 for NO_GO.
 
 ✅ **The good news**
 Tell a story: "The reefer spec is correct. 40' HC keeps your beef at -2°C the whole voyage."
