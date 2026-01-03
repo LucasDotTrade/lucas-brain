@@ -12,4 +12,7 @@ export const mastra = new Mastra({
   agents: { lucasAgent },
   workflows: { documentReviewWorkflow, packageValidationWorkflow },
   storage,
+  observability: {
+    default: { enabled: true },
+  },
 });
