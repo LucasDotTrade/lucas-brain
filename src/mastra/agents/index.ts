@@ -218,7 +218,13 @@ const getInstructions = () => {
 
 export const lucasAgent = new Agent({
   name: "Lucas",
-  instructions: () => getInstructions(),
+  instructions: {
+    role: "system",
+    content: getInstructions(),
+    providerOptions: {
+      anthropic: { cacheControl: { type: "ephemeral" } }
+    }
+  },
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
   tools: {
