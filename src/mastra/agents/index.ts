@@ -42,9 +42,10 @@ const lucasMemory = new Memory({
       scope: "resource",
       template: workingMemoryTemplate,
     },
-    // semanticRecall disabled - was causing cross-user memory leakage
-    // Re-enable with explicit scope once we confirm it's user-scoped
-    semanticRecall: false,
+    semanticRecall: {
+      topK: 1,
+      messageRange: 1,
+    },
     lastMessages: 2,
   },
 });
