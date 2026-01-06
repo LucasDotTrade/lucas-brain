@@ -248,7 +248,10 @@ const analyzeDocStep = createStep({
 
     const threadId = `package-${Date.now()}-${inputData.clientEmail}`;
 
-    const prompt = `Analyze this ${inputData.type.replace(/_/g, " ")} and extract key data.
+    const docTypeName = inputData.type.replace(/_/g, " ");
+    const prompt = `You are analyzing a ${docTypeName} as part of a COMPLETE LC DOCUMENT PACKAGE. Other documents (LC, B/L, Invoice, certificates) are being analyzed separately - cross-reference checks happen later.
+
+Your job: Extract data from THIS document and check its INTERNAL consistency only.
 
 DOCUMENT:
 ${inputData.text}
@@ -260,33 +263,38 @@ Respond in this EXACT JSON format:
   "extractedData": {
     "amount": "USD 125,000.00",
     "currency": "USD",
-    "beneficiary": "Company Name (seller/shipper/exporter - NOT consignee/buyer)",
+    "beneficiary": "Company Name",
     "applicant": "Buyer Name",
     "portOfLoading": "Shanghai, China",
-    "portOfDischarge": "Puerto Cabello, Venezuela",
-    "goodsDescription": "Steel pipes...",
-    "quantity": "500 MT",
-    "weight": "500,000 KG",
+    "portOfDischarge": "Dubai, UAE",
+    "goodsDescription": "Murban Crude Oil",
+    "quantity": "500,000 BARRELS",
+    "weight": "68,500 MT",
     "expiryDate": "2024-03-15",
-    "latestShipmentDate": "2024-03-10 (from LC - latest date for shipment)",
-    "shipmentDate": "2024-02-28 (actual shipment date from B/L)",
+    "latestShipmentDate": "2024-03-10",
+    "shipmentDate": "2024-02-28",
     "vesselName": "MV Ocean Star",
     "blNumber": "BL-2024-001",
     "lcNumber": "LC-2024-00456",
     "invoiceNumber": "INV-2024-001",
-    "apiGravity": "40.2 (for crude oil)",
-    "sulfurContent": "0.75% (for crude oil)",
+    "apiGravity": "40.2",
+    "sulfurContent": "0.75%",
     "vesselImo": "9876543",
-    "inspectionCompany": "SGS, Bureau Veritas, etc.",
+    "inspectionCompany": "SGS",
     "loadingDate": "2024-02-28",
-    "insuredValue": "USD 137,500.00 (110% of invoice)",
+    "insuredValue": "USD 137,500.00",
     "certificateNumber": "SGS-2024-001"
   },
-  "analysis": "Brief analysis text..."
+  "analysis": "Brief analysis of this document's completeness and any internal issues."
 }
 
-IMPORTANT: For beneficiary, extract the seller/shipper/exporter name, NOT the consignee/buyer.
-Only include fields that are present in the document. Be precise with extracted values.`;
+RULES:
+- Extract ALL fields present in the document
+- Only flag issues WITHIN this document (missing signatures, invalid dates, internal math errors)
+- Do NOT complain about missing LC/Invoice/B/L - those are separate documents in the package
+- Verdict GO = document is complete and internally consistent
+- Verdict WAIT = minor issues or missing optional fields
+- Verdict NO_GO = critical internal problems (corrupted, unsigned, invalid dates)`;
 
     const response = await lucas.generate(prompt, {
       resourceId: inputData.clientEmail,
