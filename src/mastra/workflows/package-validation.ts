@@ -6,6 +6,130 @@ import OpenAI from "openai";
 const sql = postgres(process.env.DATABASE_URL!);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ============================================================
+// Deterministic Date Extraction (regex-based, not LLM-dependent)
+// ============================================================
+
+const MONTH_MAP: Record<string, string> = {
+  january: "01", jan: "01",
+  february: "02", feb: "02",
+  march: "03", mar: "03",
+  april: "04", apr: "04",
+  may: "05",
+  june: "06", jun: "06",
+  july: "07", jul: "07",
+  august: "08", aug: "08",
+  september: "09", sep: "09", sept: "09",
+  october: "10", oct: "10",
+  november: "11", nov: "11",
+  december: "12", dec: "12",
+};
+
+/**
+ * Parse various date formats to ISO (YYYY-MM-DD)
+ * Handles: "15 February 2026", "Feb 15, 2026", "2026-02-15", "15/02/2026"
+ */
+function parseToISODate(dateStr: string): string | null {
+  if (!dateStr) return null;
+  const s = dateStr.trim();
+
+  // Already ISO format: 2026-02-15
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  let match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    const [, d, m, y] = match;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // "15 February 2026" or "February 15, 2026" or "15 Feb 2026"
+  match = s.match(/(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/);
+  if (match) {
+    const [, d, monthName, y] = match;
+    const m = MONTH_MAP[monthName.toLowerCase()];
+    if (m) return `${y}-${m}-${d.padStart(2, "0")}`;
+  }
+
+  // "February 15, 2026" or "Feb 15 2026"
+  match = s.match(/([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+  if (match) {
+    const [, monthName, d, y] = match;
+    const m = MONTH_MAP[monthName.toLowerCase()];
+    if (m) return `${y}-${m}-${d.padStart(2, "0")}`;
+  }
+
+  return null;
+}
+
+/**
+ * Extract critical dates from LC text using regex (deterministic)
+ */
+function extractDatesFromText(text: string): { latestShipmentDate?: string; expiryDate?: string; shipmentDate?: string } {
+  const result: { latestShipmentDate?: string; expiryDate?: string; shipmentDate?: string } = {};
+  const upper = text.toUpperCase();
+
+  // Latest Shipment Date patterns
+  const latestShipmentPatterns = [
+    /LATEST\s+SHIPMENT\s+DATE[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$|PLACE|GOODS|PORT)/i,
+    /LAST\s+DATE\s+(?:OF\s+)?SHIPMENT[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /LATEST\s+DATE\s+(?:OF\s+)?SHIPMENT[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /SHIPMENT[:\s]+(?:ON\s+OR\s+BEFORE|NOT\s+LATER\s+THAN)\s+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+  ];
+
+  for (const pattern of latestShipmentPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const parsed = parseToISODate(match[1].trim());
+      if (parsed) {
+        result.latestShipmentDate = parsed;
+        break;
+      }
+    }
+  }
+
+  // Expiry Date patterns
+  const expiryPatterns = [
+    /EXPIRY\s+DATE[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$|PLACE)/i,
+    /DATE\s+OF\s+EXPIRY[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /EXPIRES?\s+(?:ON)?[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /VALID\s+UNTIL[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+  ];
+
+  for (const pattern of expiryPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const parsed = parseToISODate(match[1].trim());
+      if (parsed) {
+        result.expiryDate = parsed;
+        break;
+      }
+    }
+  }
+
+  // B/L Shipment Date patterns (for bill of lading)
+  const shipmentPatterns = [
+    /SHIPPED\s+ON\s+BOARD\s+DATE[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /SHIPPED\s+ON\s+BOARD[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /ON\s+BOARD\s+DATE[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+    /DATE\s+OF\s+SHIPMENT[:\s]+([A-Za-z0-9\s,\/\-]+?)(?:\n|$)/i,
+  ];
+
+  for (const pattern of shipmentPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const parsed = parseToISODate(match[1].trim());
+      if (parsed) {
+        result.shipmentDate = parsed;
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
 // Shared schemas
 const documentTypeEnum = z.enum([
   // Core documents
@@ -70,6 +194,7 @@ const documentResultSchema = z.object({
   issues: z.array(issueSchema),
   extractedData: extractedDataSchema,
   analysis: z.string(),
+  rawText: z.string().optional(), // Keep raw text for deterministic checks
 });
 
 const crossRefIssueSchema = z.object({
@@ -173,24 +298,49 @@ Only include fields that are present in the document. Be precise with extracted 
       const jsonMatch = response.text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+
+        // Run deterministic date extraction (override LLM for critical dates)
+        const deterministicDates = extractDatesFromText(inputData.text);
+        const extractedData = parsed.extractedData || {};
+
+        // Use deterministic dates if found, otherwise fall back to LLM
+        if (deterministicDates.latestShipmentDate) {
+          extractedData.latestShipmentDate = deterministicDates.latestShipmentDate;
+        }
+        if (deterministicDates.expiryDate) {
+          extractedData.expiryDate = deterministicDates.expiryDate;
+        }
+        if (deterministicDates.shipmentDate) {
+          extractedData.shipmentDate = deterministicDates.shipmentDate;
+        }
+
         return {
           type: inputData.type,
           verdict: parsed.verdict || "WAIT",
           issues: parsed.issues || [],
-          extractedData: parsed.extractedData || {},
+          extractedData,
           analysis: parsed.analysis || response.text,
+          rawText: inputData.text, // Keep for cross-reference
         };
       }
     } catch (e) {
       // Fallback if JSON parsing fails
     }
 
+    // Even on fallback, try deterministic extraction
+    const deterministicDates = extractDatesFromText(inputData.text);
+
     return {
       type: inputData.type,
       verdict: "WAIT" as const,
       issues: [],
-      extractedData: {},
+      extractedData: {
+        latestShipmentDate: deterministicDates.latestShipmentDate,
+        expiryDate: deterministicDates.expiryDate,
+        shipmentDate: deterministicDates.shipmentDate,
+      },
       analysis: response.text,
+      rawText: inputData.text,
     };
   },
 });
