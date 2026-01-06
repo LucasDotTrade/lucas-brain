@@ -192,7 +192,6 @@ const extractedDataSchema = z.object({
   quantityTolerance: z.string().optional(),         // From LC: "+/- 10%" or "5 PCT MORE OR LESS"
   shippedOnBoard: z.boolean().optional(),           // From B/L: true if "SHIPPED ON BOARD" present
   issuingBank: z.string().optional(),               // From LC: bank that issued the LC
-  paymentTerms: z.string().optional(),              // From Invoice: "T/T 30 days", "Sight LC", "CAD", etc.
 });
 
 const documentResultSchema = z.object({
@@ -218,19 +217,6 @@ const docInputSchema = z.object({
   text: z.string(),
   clientEmail: z.string(),
 });
-
-// Helper: Classify payment mode from invoice payment terms
-const classifyPaymentMode = (paymentTerms: string | null | undefined): "lc" | "tt" | "unknown" => {
-  if (!paymentTerms) return "unknown";
-  const normalized = paymentTerms.toLowerCase();
-
-  const lcTerms = ["l/c", "lc ", "lc,", "letter of credit", "documentary credit", "sight credit", "usance"];
-  const ttTerms = ["t/t", "tt ", "tt,", "wire", "telegraphic", "cash", "advance", "open account", "o/a", "cad", "cash against", "net 30", "net 60", "net 90"];
-
-  if (lcTerms.some(term => normalized.includes(term))) return "lc";
-  if (ttTerms.some(term => normalized.includes(term))) return "tt";
-  return "unknown";
-};
 
 // Step 1: Prepare documents for parallel processing
 const prepareDocsStep = createStep({
@@ -310,8 +296,7 @@ Respond in this EXACT JSON format:
     "consignee": "TO ORDER OF NATIONAL BANK OF KUWAIT",
     "quantityTolerance": "+/- 10%",
     "shippedOnBoard": true,
-    "issuingBank": "NATIONAL BANK OF KUWAIT",
-    "paymentTerms": "T/T 30 days from B/L date"
+    "issuingBank": "NATIONAL BANK OF KUWAIT"
   },
   "analysis": "Brief analysis of this document's completeness and any internal issues."
 }
@@ -322,7 +307,6 @@ SPECIAL EXTRACTION RULES:
 - quantityTolerance: ONLY from LC - look for "+/- X%", "X PCT MORE OR LESS", or field 39A tolerance
 - shippedOnBoard: ONLY from B/L - true if "SHIPPED ON BOARD" or "LADEN ON BOARD" appears, false if only "RECEIVED FOR SHIPMENT"
 - issuingBank: ONLY from LC - the bank that issued the credit
-- paymentTerms: ONLY from Invoice - look for payment terms like "T/T", "TT", "Wire Transfer", "LC at sight", "Sight LC", "Usance", "Net 30", "CAD", "Cash Against Documents", "Open Account", "O/A", "Advance Payment"
 
 RULES:
 - Extract ALL fields present in the document
@@ -401,7 +385,7 @@ const crossReferenceStep = createStep({
   outputSchema: z.object({
     crossRefIssues: z.array(crossRefIssueSchema),
     documentResults: z.array(documentResultSchema),
-    paymentMode: z.enum(["lc", "tt", "unknown"]),
+    paymentMode: z.enum(["lc", "no_lc"]),
   }),
   execute: async ({ inputData, mastra }) => {
     const documentResults = inputData;
@@ -486,9 +470,9 @@ const crossReferenceStep = createStep({
     const bl = documentResults.find((d) => d.type === "bill_of_lading");
     const invoice = documentResults.find((d) => d.type === "commercial_invoice");
 
-    // Detect payment mode - if LC is present, force LC mode regardless of invoice terms
+    // Simple: LC present or not - no keyword parsing
     const hasLC = !!lc;
-    const paymentMode = hasLC ? "lc" : classifyPaymentMode(invoice?.extractedData.paymentTerms);
+    const paymentMode: "lc" | "no_lc" = hasLC ? "lc" : "no_lc";
 
     // Cross-reference amounts
     const amounts: { doc: string; value: number }[] = [];
@@ -654,8 +638,8 @@ const crossReferenceStep = createStep({
       }
     }
 
-    // LC-specific checks (skip for TT transactions)
-    if (paymentMode !== "tt") {
+    // LC-specific checks (only if LC document present)
+    if (paymentMode === "lc") {
       // Check shipment date vs LC expiry
       if (bl?.extractedData.shipmentDate && lc?.extractedData.expiryDate) {
         const shipDate = new Date(bl.extractedData.shipmentDate);
@@ -861,8 +845,8 @@ Respond with JSON only:
       }
     }
 
-    // LC-specific inspection and consignee checks (skip for TT transactions)
-    if (paymentMode !== "tt") {
+    // LC-specific inspection and consignee checks (only if LC document present)
+    if (paymentMode === "lc") {
       // Cross-reference inspection company (if LC specifies one)
       if (lc?.extractedData.requiredInspectionCompany) {
         const requiredCompany = lc.extractedData.requiredInspectionCompany.toLowerCase();
@@ -924,8 +908,8 @@ Respond with JSON only:
       }
     }
 
-    // TT mode: Check customs/export readiness instead of LC compliance
-    if (paymentMode === "tt") {
+    /// Non-LC mode: Check customs/export readiness instead of LC compliance
+    if (paymentMode === "no_lc") {
       const hasInvoice = documentResults.some((d) => d.type === "commercial_invoice");
       const hasBL = documentResults.some((d) => d.type === "bill_of_lading");
       const hasCO = documentResults.some((d) => d.type === "certificate_of_origin");
@@ -972,17 +956,6 @@ Respond with JSON only:
       }
     }
 
-    // If unknown mode and no LC provided, add clarification issue
-    if (paymentMode === "unknown" && !hasLC) {
-      crossRefIssues.push({
-        field: "paymentMode",
-        documents: ["Package"],
-        values: ["Payment terms unclear"],
-        severity: "minor",
-        description: "Is this an LC or TT/wire transaction? If LC, please send the credit.",
-      });
-    }
-
     // Check for shipped-on-board notation (critical for oil trade)
     if (bl && bl.extractedData.shippedOnBoard === false) {
       crossRefIssues.push({
@@ -1008,14 +981,14 @@ const finalVerdictStep = createStep({
   inputSchema: z.object({
     crossRefIssues: z.array(crossRefIssueSchema),
     documentResults: z.array(documentResultSchema),
-    paymentMode: z.enum(["lc", "tt", "unknown"]),
+    paymentMode: z.enum(["lc", "no_lc"]),
   }),
   outputSchema: z.object({
     overallVerdict: z.enum(["GO", "WAIT", "NO_GO"]),
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
-    paymentMode: z.enum(["lc", "tt", "unknown"]),
+    paymentMode: z.enum(["lc", "no_lc"]),
   }),
   execute: async ({ inputData }) => {
     const { documentResults, crossRefIssues, paymentMode } = inputData;
@@ -1081,7 +1054,7 @@ const recordPackageStep = createStep({
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
-    paymentMode: z.enum(["lc", "tt", "unknown"]),
+    paymentMode: z.enum(["lc", "no_lc"]),
   }),
   outputSchema: z.object({
     packageId: z.string(),
@@ -1089,7 +1062,7 @@ const recordPackageStep = createStep({
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
-    paymentMode: z.enum(["lc", "tt", "unknown"]),
+    paymentMode: z.enum(["lc", "no_lc"]),
   }),
   execute: async ({ inputData }) => {
     const { overallVerdict, documentResults, crossReferenceIssues, recommendation, paymentMode } = inputData;
@@ -1169,7 +1142,7 @@ export const packageValidationWorkflow = createWorkflow({
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
-    paymentMode: z.enum(["lc", "tt", "unknown"]),
+    paymentMode: z.enum(["lc", "no_lc"]),
   }),
 })
   .then(prepareDocsStep)

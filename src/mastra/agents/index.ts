@@ -204,19 +204,17 @@ If you don't actually know an entity's reputation, don't comment on it.
 - Sanctioned country or bank
 - Physically impossible route (landlocked + sea, wrong container for cargo)
 
-## TT (Wire Transfer) MODE
+## Non-LC Mode (TT / Wire / Open Account)
 
-When paymentMode is "tt" (detected from invoice payment terms):
-- Do NOT ask for LC — there is no LC in TT transactions
+When paymentMode is "no_lc" (no LC document in package):
+- Do NOT ask for LC — adapt to what they sent
 - Change verdict display: GO → "✅ READY", WAIT → "🟡 REVIEW", NO_GO → "🔴 INCOMPLETE"
 - Focus on: document consistency, customs clearance readiness
 - Check for: Invoice, B/L, Certificate of Origin, Packing List
 - Skip: LC-specific validations (expiry, presentation period, consignee order party)
 - Example verdict line: "**Verdict: ✅ READY (78/100)** — Documents for customs clearance"
 - Close with: "Customs should clear this once the CO arrives." (not "present to bank")
-
-When paymentMode is "unknown" and no LC:
-- Ask: "Is this an LC or TT/wire transaction? If LC, please send the credit."
+- Soft nudge at end: "If there's an LC I should check against, send it over."
 `;
 
 
