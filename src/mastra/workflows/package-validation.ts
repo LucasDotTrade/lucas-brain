@@ -8,11 +8,26 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Shared schemas
 const documentTypeEnum = z.enum([
+  // Core documents
   "letter_of_credit",
   "bill_of_lading",
   "commercial_invoice",
   "packing_list",
   "certificate_of_origin",
+  // O&G specific documents
+  "certificate_of_quality",
+  "certificate_of_quantity",
+  "insurance_certificate",
+  "inspection_certificate",
+  "bill_of_exchange",
+  "beneficiary_certificate",
+  "vessel_nomination",
+  "ullage_report",
+  "tank_calibration_certificate",
+  "loading_certificate",
+  "weight_certificate",
+  "non_manipulation_certificate",
+  "notice_of_readiness",
 ]);
 
 const issueSchema = z.object({
@@ -22,6 +37,7 @@ const issueSchema = z.object({
 });
 
 const extractedDataSchema = z.object({
+  // Core fields
   amount: z.string().optional(),
   currency: z.string().optional(),
   beneficiary: z.string().optional(),
@@ -37,6 +53,14 @@ const extractedDataSchema = z.object({
   blNumber: z.string().optional(),
   lcNumber: z.string().optional(),
   invoiceNumber: z.string().optional(),
+  // O&G specific fields
+  apiGravity: z.string().optional(),
+  sulfurContent: z.string().optional(),
+  vesselImo: z.string().optional(),
+  inspectionCompany: z.string().optional(),
+  loadingDate: z.string().optional(),
+  insuredValue: z.string().optional(),
+  certificateNumber: z.string().optional(),
 });
 
 const documentResultSchema = z.object({
@@ -110,7 +134,7 @@ Respond in this EXACT JSON format:
   "extractedData": {
     "amount": "USD 125,000.00",
     "currency": "USD",
-    "beneficiary": "Company Name",
+    "beneficiary": "Company Name (seller/shipper/exporter - NOT consignee/buyer)",
     "applicant": "Buyer Name",
     "portOfLoading": "Shanghai, China",
     "portOfDischarge": "Puerto Cabello, Venezuela",
@@ -122,11 +146,19 @@ Respond in this EXACT JSON format:
     "vesselName": "MV Ocean Star",
     "blNumber": "BL-2024-001",
     "lcNumber": "LC-2024-00456",
-    "invoiceNumber": "INV-2024-001"
+    "invoiceNumber": "INV-2024-001",
+    "apiGravity": "40.2 (for crude oil)",
+    "sulfurContent": "0.75% (for crude oil)",
+    "vesselImo": "9876543",
+    "inspectionCompany": "SGS, Bureau Veritas, etc.",
+    "loadingDate": "2024-02-28",
+    "insuredValue": "USD 137,500.00 (110% of invoice)",
+    "certificateNumber": "SGS-2024-001"
   },
   "analysis": "Brief analysis text..."
 }
 
+IMPORTANT: For beneficiary, extract the seller/shipper/exporter name, NOT the consignee/buyer.
 Only include fields that are present in the document. Be precise with extracted values.`;
 
     const response = await lucas.generate(prompt, {
