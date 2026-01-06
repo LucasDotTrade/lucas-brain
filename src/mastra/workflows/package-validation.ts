@@ -541,8 +541,22 @@ const crossReferenceStep = createStep({
     }
 
     // Cross-reference beneficiary names
+    // Only include docs where "beneficiary" means the LC beneficiary (seller/exporter)
+    // Exclude third-party certs (SGS, DNV) where LLM extracts the issuer instead
+    const beneficiaryRelevantDocTypes = [
+      "letter_of_credit",
+      "commercial_invoice",
+      "bill_of_lading",
+      "packing_list",
+      "certificate_of_origin",
+      "insurance_certificate",
+      "beneficiary_certificate",
+      "non_manipulation_certificate",
+    ];
+
     const beneficiaries: { doc: string; value: string }[] = [];
     for (const doc of documentResults) {
+      if (!beneficiaryRelevantDocTypes.includes(doc.type)) continue;
       const docName = doc.type.replace(/_/g, " ").toUpperCase();
       if (isSpecified(doc.extractedData.beneficiary)) {
         beneficiaries.push({ doc: docName, value: doc.extractedData.beneficiary! });
@@ -564,8 +578,22 @@ const crossReferenceStep = createStep({
     }
 
     // Cross-reference LC numbers
+    // Exclude docs that may have their own reference numbers (not LC numbers)
+    const lcNumberRelevantDocTypes = [
+      "letter_of_credit",
+      "commercial_invoice",
+      "bill_of_lading",
+      "packing_list",
+      "certificate_of_origin",
+      "insurance_certificate",
+      "bill_of_exchange",
+      "beneficiary_certificate",
+      "non_manipulation_certificate",
+    ];
+
     const lcNumbers: { doc: string; value: string }[] = [];
     for (const doc of documentResults) {
+      if (!lcNumberRelevantDocTypes.includes(doc.type)) continue;
       const docName = doc.type.replace(/_/g, " ").toUpperCase();
       if (isSpecified(doc.extractedData.lcNumber)) {
         lcNumbers.push({ doc: docName, value: doc.extractedData.lcNumber! });
