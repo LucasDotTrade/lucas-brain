@@ -192,6 +192,7 @@ const extractedDataSchema = z.object({
   quantityTolerance: z.string().optional(),         // From LC: "+/- 10%" or "5 PCT MORE OR LESS"
   shippedOnBoard: z.boolean().optional(),           // From B/L: true if "SHIPPED ON BOARD" present
   issuingBank: z.string().optional(),               // From LC: bank that issued the LC
+  paymentTerms: z.string().optional(),              // From Invoice: "T/T 30 days", "Sight LC", "CAD", etc.
 });
 
 const documentResultSchema = z.object({
@@ -217,6 +218,19 @@ const docInputSchema = z.object({
   text: z.string(),
   clientEmail: z.string(),
 });
+
+// Helper: Classify payment mode from invoice payment terms
+const classifyPaymentMode = (paymentTerms: string | null | undefined): "lc" | "tt" | "unknown" => {
+  if (!paymentTerms) return "unknown";
+  const normalized = paymentTerms.toLowerCase();
+
+  const lcTerms = ["l/c", "lc ", "lc,", "letter of credit", "documentary credit", "sight credit", "usance"];
+  const ttTerms = ["t/t", "tt ", "tt,", "wire", "telegraphic", "cash", "advance", "open account", "o/a", "cad", "cash against", "net 30", "net 60", "net 90"];
+
+  if (lcTerms.some(term => normalized.includes(term))) return "lc";
+  if (ttTerms.some(term => normalized.includes(term))) return "tt";
+  return "unknown";
+};
 
 // Step 1: Prepare documents for parallel processing
 const prepareDocsStep = createStep({
@@ -296,7 +310,8 @@ Respond in this EXACT JSON format:
     "consignee": "TO ORDER OF NATIONAL BANK OF KUWAIT",
     "quantityTolerance": "+/- 10%",
     "shippedOnBoard": true,
-    "issuingBank": "NATIONAL BANK OF KUWAIT"
+    "issuingBank": "NATIONAL BANK OF KUWAIT",
+    "paymentTerms": "T/T 30 days from B/L date"
   },
   "analysis": "Brief analysis of this document's completeness and any internal issues."
 }
@@ -307,6 +322,7 @@ SPECIAL EXTRACTION RULES:
 - quantityTolerance: ONLY from LC - look for "+/- X%", "X PCT MORE OR LESS", or field 39A tolerance
 - shippedOnBoard: ONLY from B/L - true if "SHIPPED ON BOARD" or "LADEN ON BOARD" appears, false if only "RECEIVED FOR SHIPMENT"
 - issuingBank: ONLY from LC - the bank that issued the credit
+- paymentTerms: ONLY from Invoice - look for payment terms like "T/T", "TT", "Wire Transfer", "LC at sight", "Sight LC", "Usance", "Net 30", "CAD", "Cash Against Documents", "Open Account", "O/A", "Advance Payment"
 
 RULES:
 - Extract ALL fields present in the document
@@ -385,6 +401,7 @@ const crossReferenceStep = createStep({
   outputSchema: z.object({
     crossRefIssues: z.array(crossRefIssueSchema),
     documentResults: z.array(documentResultSchema),
+    paymentMode: z.enum(["lc", "tt", "unknown"]),
   }),
   execute: async ({ inputData, mastra }) => {
     const documentResults = inputData;
@@ -468,6 +485,10 @@ const crossReferenceStep = createStep({
     const lc = documentResults.find((d) => d.type === "letter_of_credit");
     const bl = documentResults.find((d) => d.type === "bill_of_lading");
     const invoice = documentResults.find((d) => d.type === "commercial_invoice");
+
+    // Detect payment mode - if LC is present, force LC mode regardless of invoice terms
+    const hasLC = !!lc;
+    const paymentMode = hasLC ? "lc" : classifyPaymentMode(invoice?.extractedData.paymentTerms);
 
     // Cross-reference amounts
     const amounts: { doc: string; value: number }[] = [];
@@ -633,48 +654,51 @@ const crossReferenceStep = createStep({
       }
     }
 
-    // Check shipment date vs LC expiry
-    if (bl?.extractedData.shipmentDate && lc?.extractedData.expiryDate) {
-      const shipDate = new Date(bl.extractedData.shipmentDate);
-      const expDate = new Date(lc.extractedData.expiryDate);
-      if (!isNaN(shipDate.getTime()) && !isNaN(expDate.getTime()) && shipDate > expDate) {
-        crossRefIssues.push({
-          field: "dates",
-          documents: ["LC", "B/L"],
-          values: [`LC Expiry: ${lc.extractedData.expiryDate}`, `Shipment: ${bl.extractedData.shipmentDate}`],
-          severity: "critical",
-          description: `Shipment date is after LC expiry - presentation will be rejected`,
-        });
+    // LC-specific checks (skip for TT transactions)
+    if (paymentMode !== "tt") {
+      // Check shipment date vs LC expiry
+      if (bl?.extractedData.shipmentDate && lc?.extractedData.expiryDate) {
+        const shipDate = new Date(bl.extractedData.shipmentDate);
+        const expDate = new Date(lc.extractedData.expiryDate);
+        if (!isNaN(shipDate.getTime()) && !isNaN(expDate.getTime()) && shipDate > expDate) {
+          crossRefIssues.push({
+            field: "dates",
+            documents: ["LC", "B/L"],
+            values: [`LC Expiry: ${lc.extractedData.expiryDate}`, `Shipment: ${bl.extractedData.shipmentDate}`],
+            severity: "critical",
+            description: `Shipment date is after LC expiry - presentation will be rejected`,
+          });
+        }
       }
-    }
 
-    // Check if LC is expired (expiry date < today)
-    if (lc?.extractedData.expiryDate) {
-      const expDate = new Date(lc.extractedData.expiryDate);
-      const today = new Date();
-      if (!isNaN(expDate.getTime()) && expDate < today) {
-        crossRefIssues.push({
-          field: "lcExpiry",
-          documents: ["LC"],
-          values: [`LC Expiry: ${lc.extractedData.expiryDate}`, `Today: ${today.toISOString().split('T')[0]}`],
-          severity: "critical",
-          description: `LC expired on ${lc.extractedData.expiryDate} - cannot present documents`,
-        });
+      // Check if LC is expired (expiry date < today)
+      if (lc?.extractedData.expiryDate) {
+        const expDate = new Date(lc.extractedData.expiryDate);
+        const today = new Date();
+        if (!isNaN(expDate.getTime()) && expDate < today) {
+          crossRefIssues.push({
+            field: "lcExpiry",
+            documents: ["LC"],
+            values: [`LC Expiry: ${lc.extractedData.expiryDate}`, `Today: ${today.toISOString().split('T')[0]}`],
+            severity: "critical",
+            description: `LC expired on ${lc.extractedData.expiryDate} - cannot present documents`,
+          });
+        }
       }
-    }
 
-    // Check if shipment is after LC latest shipment date
-    if (bl?.extractedData.shipmentDate && lc?.extractedData.latestShipmentDate) {
-      const shipDate = new Date(bl.extractedData.shipmentDate);
-      const latestDate = new Date(lc.extractedData.latestShipmentDate);
-      if (!isNaN(shipDate.getTime()) && !isNaN(latestDate.getTime()) && shipDate > latestDate) {
-        crossRefIssues.push({
-          field: "lateShipment",
-          documents: ["LC", "B/L"],
-          values: [`LC Latest Shipment: ${lc.extractedData.latestShipmentDate}`, `B/L Shipped: ${bl.extractedData.shipmentDate}`],
-          severity: "critical",
-          description: `Shipment date ${bl.extractedData.shipmentDate} is after LC latest shipment date ${lc.extractedData.latestShipmentDate} - bank will reject`,
-        });
+      // Check if shipment is after LC latest shipment date
+      if (bl?.extractedData.shipmentDate && lc?.extractedData.latestShipmentDate) {
+        const shipDate = new Date(bl.extractedData.shipmentDate);
+        const latestDate = new Date(lc.extractedData.latestShipmentDate);
+        if (!isNaN(shipDate.getTime()) && !isNaN(latestDate.getTime()) && shipDate > latestDate) {
+          crossRefIssues.push({
+            field: "lateShipment",
+            documents: ["LC", "B/L"],
+            values: [`LC Latest Shipment: ${lc.extractedData.latestShipmentDate}`, `B/L Shipped: ${bl.extractedData.shipmentDate}`],
+            severity: "critical",
+            description: `Shipment date ${bl.extractedData.shipmentDate} is after LC latest shipment date ${lc.extractedData.latestShipmentDate} - bank will reject`,
+          });
+        }
       }
     }
 
@@ -837,64 +861,126 @@ Respond with JSON only:
       }
     }
 
-    // Cross-reference inspection company (if LC specifies one)
-    if (lc?.extractedData.requiredInspectionCompany) {
-      const requiredCompany = lc.extractedData.requiredInspectionCompany.toLowerCase();
-      const inspectionDocs = documentResults.filter(d =>
-        ["inspection_certificate", "certificate_of_quality", "certificate_of_quantity"].includes(d.type) &&
-        isSpecified(d.extractedData.inspectionCompany)
-      );
+    // LC-specific inspection and consignee checks (skip for TT transactions)
+    if (paymentMode !== "tt") {
+      // Cross-reference inspection company (if LC specifies one)
+      if (lc?.extractedData.requiredInspectionCompany) {
+        const requiredCompany = lc.extractedData.requiredInspectionCompany.toLowerCase();
+        const inspectionDocs = documentResults.filter(d =>
+          ["inspection_certificate", "certificate_of_quality", "certificate_of_quantity"].includes(d.type) &&
+          isSpecified(d.extractedData.inspectionCompany)
+        );
 
-      for (const doc of inspectionDocs) {
-        const actualCompany = doc.extractedData.inspectionCompany!.toLowerCase();
-        // Check if required company name appears in actual company
-        if (!actualCompany.includes(requiredCompany) && !requiredCompany.includes(actualCompany)) {
+        for (const doc of inspectionDocs) {
+          const actualCompany = doc.extractedData.inspectionCompany!.toLowerCase();
+          // Check if required company name appears in actual company
+          if (!actualCompany.includes(requiredCompany) && !requiredCompany.includes(actualCompany)) {
+            crossRefIssues.push({
+              field: "inspectionCompany",
+              documents: ["LC", doc.type.replace(/_/g, " ").toUpperCase()],
+              values: [`LC requires: ${lc.extractedData.requiredInspectionCompany}`, `${doc.type.replace(/_/g, " ")}: ${doc.extractedData.inspectionCompany}`],
+              severity: "critical",
+              description: `LC requires inspection by ${lc.extractedData.requiredInspectionCompany} but certificate issued by ${doc.extractedData.inspectionCompany}`,
+            });
+          }
+        }
+      }
+
+      // Cross-reference consignee/order party (B/L must be to order of issuing bank)
+      if (bl?.extractedData.consignee && lc?.extractedData.issuingBank) {
+        const consignee = bl.extractedData.consignee.toLowerCase();
+        const issuingBank = lc.extractedData.issuingBank.toLowerCase();
+
+        // B/L should be "to order" or "to order of [issuing bank]"
+        const isToOrder = consignee.includes("to order");
+
+        // Better matching: exclude common banking words, require distinctive words
+        const commonWords = ["bank", "of", "the", "n.a.", "na", "ltd", "limited", "inc", "corp", "plc"];
+        const bankDistinctiveWords = issuingBank.split(/\s+/)
+          .filter(word => word.length > 2 && !commonWords.includes(word));
+
+        // Check if consignee mentions issuing bank (exact or distinctive words)
+        const mentionsIssuingBank = consignee.includes(issuingBank) ||
+          bankDistinctiveWords.some(word => consignee.includes(word));
+
+        if (!isToOrder) {
           crossRefIssues.push({
-            field: "inspectionCompany",
-            documents: ["LC", doc.type.replace(/_/g, " ").toUpperCase()],
-            values: [`LC requires: ${lc.extractedData.requiredInspectionCompany}`, `${doc.type.replace(/_/g, " ")}: ${doc.extractedData.inspectionCompany}`],
+            field: "consignee",
+            documents: ["B/L", "LC"],
+            values: [`B/L Consignee: ${bl.extractedData.consignee}`, `LC Issuing Bank: ${lc.extractedData.issuingBank}`],
             severity: "critical",
-            description: `LC requires inspection by ${lc.extractedData.requiredInspectionCompany} but certificate issued by ${doc.extractedData.inspectionCompany}`,
+            description: `B/L not made "to order" - should be "TO ORDER" or "TO ORDER OF ${lc.extractedData.issuingBank}" for LC presentation`,
+          });
+        } else if (consignee.includes("to order of") && !mentionsIssuingBank) {
+          // B/L is "to order of [someone]" but not the issuing bank
+          crossRefIssues.push({
+            field: "consignee",
+            documents: ["B/L", "LC"],
+            values: [`B/L Consignee: ${bl.extractedData.consignee}`, `LC Issuing Bank: ${lc.extractedData.issuingBank}`],
+            severity: "major",
+            description: `B/L made to order of wrong party - should be "TO ORDER OF ${lc.extractedData.issuingBank}"`,
           });
         }
       }
     }
 
-    // Cross-reference consignee/order party (B/L must be to order of issuing bank)
-    if (bl?.extractedData.consignee && lc?.extractedData.issuingBank) {
-      const consignee = bl.extractedData.consignee.toLowerCase();
-      const issuingBank = lc.extractedData.issuingBank.toLowerCase();
+    // TT mode: Check customs/export readiness instead of LC compliance
+    if (paymentMode === "tt") {
+      const hasInvoice = documentResults.some((d) => d.type === "commercial_invoice");
+      const hasBL = documentResults.some((d) => d.type === "bill_of_lading");
+      const hasCO = documentResults.some((d) => d.type === "certificate_of_origin");
+      const hasPackingList = documentResults.some((d) => d.type === "packing_list");
 
-      // B/L should be "to order" or "to order of [issuing bank]"
-      const isToOrder = consignee.includes("to order");
-
-      // Better matching: exclude common banking words, require distinctive words
-      const commonWords = ["bank", "of", "the", "n.a.", "na", "ltd", "limited", "inc", "corp", "plc"];
-      const bankDistinctiveWords = issuingBank.split(/\s+/)
-        .filter(word => word.length > 2 && !commonWords.includes(word));
-
-      // Check if consignee mentions issuing bank (exact or distinctive words)
-      const mentionsIssuingBank = consignee.includes(issuingBank) ||
-        bankDistinctiveWords.some(word => consignee.includes(word));
-
-      if (!isToOrder) {
+      // Critical: Invoice and B/L required for cargo release
+      if (!hasInvoice) {
         crossRefIssues.push({
-          field: "consignee",
-          documents: ["B/L", "LC"],
-          values: [`B/L Consignee: ${bl.extractedData.consignee}`, `LC Issuing Bank: ${lc.extractedData.issuingBank}`],
+          field: "customsReadiness",
+          documents: ["Package"],
+          values: ["Missing Commercial Invoice"],
           severity: "critical",
-          description: `B/L not made "to order" - should be "TO ORDER" or "TO ORDER OF ${lc.extractedData.issuingBank}" for LC presentation`,
-        });
-      } else if (consignee.includes("to order of") && !mentionsIssuingBank) {
-        // B/L is "to order of [someone]" but not the issuing bank
-        crossRefIssues.push({
-          field: "consignee",
-          documents: ["B/L", "LC"],
-          values: [`B/L Consignee: ${bl.extractedData.consignee}`, `LC Issuing Bank: ${lc.extractedData.issuingBank}`],
-          severity: "major",
-          description: `B/L made to order of wrong party - should be "TO ORDER OF ${lc.extractedData.issuingBank}"`,
+          description: "Commercial Invoice required for customs clearance",
         });
       }
+      if (!hasBL) {
+        crossRefIssues.push({
+          field: "customsReadiness",
+          documents: ["Package"],
+          values: ["Missing Bill of Lading"],
+          severity: "critical",
+          description: "Bill of Lading required for cargo release",
+        });
+      }
+
+      // Major: CO and Packing List typically needed
+      if (!hasCO) {
+        crossRefIssues.push({
+          field: "customsReadiness",
+          documents: ["Package"],
+          values: ["Missing Certificate of Origin"],
+          severity: "major",
+          description: "Certificate of Origin typically required for customs clearance",
+        });
+      }
+      if (!hasPackingList) {
+        crossRefIssues.push({
+          field: "customsReadiness",
+          documents: ["Package"],
+          values: ["Missing Packing List"],
+          severity: "major",
+          description: "Packing List helps customs verify cargo contents",
+        });
+      }
+    }
+
+    // If unknown mode and no LC provided, add clarification issue
+    if (paymentMode === "unknown" && !hasLC) {
+      crossRefIssues.push({
+        field: "paymentMode",
+        documents: ["Package"],
+        values: ["Payment terms unclear"],
+        severity: "minor",
+        description: "Is this an LC or TT/wire transaction? If LC, please send the credit.",
+      });
     }
 
     // Check for shipped-on-board notation (critical for oil trade)
@@ -911,6 +997,7 @@ Respond with JSON only:
     return {
       crossRefIssues,
       documentResults,
+      paymentMode,
     };
   },
 });
@@ -921,15 +1008,17 @@ const finalVerdictStep = createStep({
   inputSchema: z.object({
     crossRefIssues: z.array(crossRefIssueSchema),
     documentResults: z.array(documentResultSchema),
+    paymentMode: z.enum(["lc", "tt", "unknown"]),
   }),
   outputSchema: z.object({
     overallVerdict: z.enum(["GO", "WAIT", "NO_GO"]),
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
+    paymentMode: z.enum(["lc", "tt", "unknown"]),
   }),
   execute: async ({ inputData }) => {
-    const { documentResults, crossRefIssues } = inputData;
+    const { documentResults, crossRefIssues, paymentMode } = inputData;
 
     // Check for critical issues
     const hasCriticalDocIssue = documentResults.some((d) =>
@@ -979,6 +1068,7 @@ const finalVerdictStep = createStep({
       documentResults,
       crossReferenceIssues: crossRefIssues,
       recommendation,
+      paymentMode,
     };
   },
 });
@@ -991,6 +1081,7 @@ const recordPackageStep = createStep({
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
+    paymentMode: z.enum(["lc", "tt", "unknown"]),
   }),
   outputSchema: z.object({
     packageId: z.string(),
@@ -998,9 +1089,10 @@ const recordPackageStep = createStep({
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
+    paymentMode: z.enum(["lc", "tt", "unknown"]),
   }),
   execute: async ({ inputData }) => {
-    const { overallVerdict, documentResults, crossReferenceIssues, recommendation } = inputData;
+    const { overallVerdict, documentResults, crossReferenceIssues, recommendation, paymentMode } = inputData;
 
     // Create embedding for semantic search
     const embeddingText = [
@@ -1053,6 +1145,7 @@ const recordPackageStep = createStep({
       documentResults,
       crossReferenceIssues,
       recommendation,
+      paymentMode,
     };
   },
 });
@@ -1076,6 +1169,7 @@ export const packageValidationWorkflow = createWorkflow({
     documentResults: z.array(documentResultSchema),
     crossReferenceIssues: z.array(crossRefIssueSchema),
     recommendation: z.string(),
+    paymentMode: z.enum(["lc", "tt", "unknown"]),
   }),
 })
   .then(prepareDocsStep)
