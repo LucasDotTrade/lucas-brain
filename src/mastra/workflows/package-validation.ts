@@ -323,8 +323,19 @@ const crossReferenceStep = createStep({
       return true;
     };
 
+    // Only cross-reference ports from documents that have actual loading/discharge port fields
+    // Exclude docs where "location" or "country" might be wrongly extracted as port
+    const portRelevantDocTypes = [
+      "letter_of_credit", "bill_of_lading", "commercial_invoice",
+      "certificate_of_origin", "insurance_certificate", "inspection_certificate",
+      "loading_certificate", "vessel_nomination"
+    ];
+
     for (const doc of documentResults) {
       const docName = doc.type.replace(/_/g, " ").toUpperCase();
+      // Only include port-relevant doc types in cross-reference
+      if (!portRelevantDocTypes.includes(doc.type)) continue;
+
       if (isSpecified(doc.extractedData.portOfLoading)) {
         portsOfLoading.push({ doc: docName, value: doc.extractedData.portOfLoading! });
       }
