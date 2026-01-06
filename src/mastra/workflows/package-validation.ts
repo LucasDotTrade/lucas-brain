@@ -236,14 +236,16 @@ const prepareDocsStep = createStep({
 });
 
 // Step 2: Analyze individual document (used in foreach)
+// Uses Haiku for extraction (~$0.0005/doc) instead of Sonnet (~$0.015/doc)
 const analyzeDocStep = createStep({
   id: "analyze-doc",
   inputSchema: docInputSchema,
   outputSchema: documentResultSchema,
   execute: async ({ inputData, mastra }) => {
-    const lucas = mastra?.getAgent("lucasAgent");
-    if (!lucas) {
-      throw new Error("Lucas agent not found");
+    // Use Haiku for fast/cheap extraction
+    const extractor = mastra?.getAgent("haikuExtractor");
+    if (!extractor) {
+      throw new Error("Haiku extractor agent not found");
     }
 
     const threadId = `package-${Date.now()}-${inputData.clientEmail}`;
@@ -302,9 +304,8 @@ CRITICAL FOR BENEFICIARY FIELD:
 - For Invoice: beneficiary = the seller issuing the invoice
 - For Certificates: beneficiary = the party who requested/benefits from the certificate`;
 
-    const response = await lucas.generate(prompt, {
-      resourceId: inputData.clientEmail,
-      threadId,
+    const response = await extractor.generate(prompt, {
+      // No memory for extraction - pure stateless extraction
     });
 
     // Parse JSON from response
