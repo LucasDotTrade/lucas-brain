@@ -313,13 +313,23 @@ const crossReferenceStep = createStep({
     const portsOfLoading: { doc: string; value: string }[] = [];
     const portsOfDischarge: { doc: string; value: string }[] = [];
 
+    // Helper to check if a value is actually specified (not empty/n/a/not specified)
+    const isSpecified = (val: string | undefined): boolean => {
+      if (!val) return false;
+      const lower = val.toLowerCase().trim();
+      if (lower === "" || lower === "n/a" || lower === "na" || lower === "not specified" || lower === "not applicable" || lower === "none" || lower === "-") {
+        return false;
+      }
+      return true;
+    };
+
     for (const doc of documentResults) {
       const docName = doc.type.replace(/_/g, " ").toUpperCase();
-      if (doc.extractedData.portOfLoading) {
-        portsOfLoading.push({ doc: docName, value: doc.extractedData.portOfLoading });
+      if (isSpecified(doc.extractedData.portOfLoading)) {
+        portsOfLoading.push({ doc: docName, value: doc.extractedData.portOfLoading! });
       }
-      if (doc.extractedData.portOfDischarge) {
-        portsOfDischarge.push({ doc: docName, value: doc.extractedData.portOfDischarge });
+      if (isSpecified(doc.extractedData.portOfDischarge)) {
+        portsOfDischarge.push({ doc: docName, value: doc.extractedData.portOfDischarge! });
       }
     }
 
@@ -357,8 +367,8 @@ const crossReferenceStep = createStep({
     const beneficiaries: { doc: string; value: string }[] = [];
     for (const doc of documentResults) {
       const docName = doc.type.replace(/_/g, " ").toUpperCase();
-      if (doc.extractedData.beneficiary) {
-        beneficiaries.push({ doc: docName, value: doc.extractedData.beneficiary });
+      if (isSpecified(doc.extractedData.beneficiary)) {
+        beneficiaries.push({ doc: docName, value: doc.extractedData.beneficiary! });
       }
     }
 
@@ -380,8 +390,8 @@ const crossReferenceStep = createStep({
     const lcNumbers: { doc: string; value: string }[] = [];
     for (const doc of documentResults) {
       const docName = doc.type.replace(/_/g, " ").toUpperCase();
-      if (doc.extractedData.lcNumber) {
-        lcNumbers.push({ doc: docName, value: doc.extractedData.lcNumber });
+      if (isSpecified(doc.extractedData.lcNumber)) {
+        lcNumbers.push({ doc: docName, value: doc.extractedData.lcNumber! });
       }
     }
 
