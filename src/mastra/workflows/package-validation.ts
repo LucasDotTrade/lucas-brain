@@ -867,8 +867,15 @@ Respond with JSON only:
 
       // B/L should be "to order" or "to order of [issuing bank]"
       const isToOrder = consignee.includes("to order");
+
+      // Better matching: exclude common banking words, require distinctive words
+      const commonWords = ["bank", "of", "the", "n.a.", "na", "ltd", "limited", "inc", "corp", "plc"];
+      const bankDistinctiveWords = issuingBank.split(/\s+/)
+        .filter(word => word.length > 2 && !commonWords.includes(word));
+
+      // Check if consignee mentions issuing bank (exact or distinctive words)
       const mentionsIssuingBank = consignee.includes(issuingBank) ||
-        issuingBank.split(" ").some(word => word.length > 3 && consignee.includes(word));
+        bankDistinctiveWords.some(word => consignee.includes(word));
 
       if (!isToOrder) {
         crossRefIssues.push({
