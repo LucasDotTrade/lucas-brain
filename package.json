@@ -15,6 +15,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.1",
     "@ai-sdk/openai": "^3.0.1",
+    "@anthropic-ai/sdk": "^0.71.2",
     "@mastra/core": "latest",
     "@mastra/evals": "^0.14.4",
     "@mastra/libsql": "latest",
