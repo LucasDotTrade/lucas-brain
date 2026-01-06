@@ -368,7 +368,7 @@ const crossReferenceStep = createStep({
     crossRefIssues: z.array(crossRefIssueSchema),
     documentResults: z.array(documentResultSchema),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, mastra }) => {
     const documentResults = inputData;
     const crossRefIssues: z.infer<typeof crossRefIssueSchema>[] = [];
 
@@ -723,116 +723,78 @@ const crossReferenceStep = createStep({
       }
     }
 
-    // Helper to normalize and extract significant words
-    const extractSignificantWords = (desc: string): Set<string> => {
-      const normalized = desc.toLowerCase()
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      // Filler words to ignore
-      const fillerWords = new Set(["of", "the", "and", "or", "for", "in", "on", "at", "to", "from", "with"]);
-
-      return new Set(
-        normalized.split(" ")
-          .filter(w => w.length > 1 && !fillerWords.has(w))
-      );
-    };
-
-    // Check if descriptions are contradictory (different product entirely)
-    const isContradictory = (lcDesc: string, otherDesc: string): boolean => {
-      const lcWords = extractSignificantWords(lcDesc);
-      const otherWords = extractSignificantWords(otherDesc);
-
-      // Key product categories that would indicate contradiction
-      const productCategories = [
-        ["crude", "oil", "petroleum"],
-        ["beef", "meat", "cattle"],
-        ["chicken", "poultry"],
-        ["fish", "seafood", "salmon", "tuna"],
-        ["rice", "grain", "wheat", "corn"],
-        ["sugar", "sweetener"],
-        ["coffee", "cocoa"],
-        ["steel", "iron", "metal"],
-        ["cotton", "textile", "fabric"],
-      ];
-
-      // Find which category LC belongs to
-      let lcCategory: string[] | null = null;
-      for (const category of productCategories) {
-        if (category.some(word => lcWords.has(word))) {
-          lcCategory = category;
-          break;
-        }
+    // Semantic comparison using Haiku - handles any product type
+    // Replaces hardcoded product categories with LLM understanding
+    const compareGoodsDescriptions = async (
+      lcDesc: string,
+      otherDesc: string,
+      docType: "invoice" | "bl"
+    ): Promise<{ matches: boolean; reason?: string }> => {
+      const extractor = mastra?.getAgent("haikuExtractor");
+      if (!extractor) {
+        // Fallback: flag for review if Haiku unavailable
+        return { matches: false, reason: "Unable to verify goods description - Haiku unavailable" };
       }
 
-      // If LC has a clear category, check if other doc mentions a different one
-      if (lcCategory) {
-        for (const category of productCategories) {
-          if (category === lcCategory) continue;
-          if (category.some(word => otherWords.has(word))) {
-            return true; // Different product category = contradiction
-          }
-        }
+      const rule = docType === "invoice"
+        ? "UCP 600 Article 18(c): Invoice must 'correspond' with LC - all key product descriptors (grade, type, specification) must match. Missing descriptors = mismatch."
+        : "UCP 600 Article 19: B/L can use general terms, only fails if describing a completely different product category.";
+
+      const prompt = `Compare these goods descriptions for a Letter of Credit presentation.
+
+LC description: "${lcDesc}"
+${docType === "invoice" ? "Invoice" : "B/L"} description: "${otherDesc}"
+
+Rule: ${rule}
+
+Examples:
+- LC "MURBAN CRUDE OIL" vs Invoice "CRUDE OIL" → mismatch (invoice missing grade "MURBAN")
+- LC "MURBAN CRUDE OIL" vs B/L "CRUDE OIL" → match (B/L can use general terms)
+- LC "MURBAN CRUDE OIL" vs B/L "FROZEN BEEF" → mismatch (different product entirely)
+- LC "FROZEN BEEF CUTS" vs Invoice "BEEF CUTS FROZEN" → match (same words, different order)
+
+Respond with JSON only:
+{"matches": true or false, "reason": "one sentence explanation"}`;
+
+      try {
+        const response = await extractor.generate(prompt, {});
+        const jsonStr = response.text.replace(/```json\n?|\n?```/g, "").trim();
+        const json = JSON.parse(jsonStr);
+        return { matches: Boolean(json.matches), reason: json.reason };
+      } catch {
+        // Fallback: flag for review if Haiku fails
+        return { matches: false, reason: "Unable to verify goods description - manual review recommended" };
       }
-
-      return false;
-    };
-
-    // UCP 600 Article 18(c): Invoice must "correspond" with LC
-    // All significant LC words should appear in invoice (order-independent)
-    const invoiceCorrespondsToLC = (lcDesc: string, invoiceDesc: string): boolean => {
-      const lcWords = extractSignificantWords(lcDesc);
-      const invoiceWords = extractSignificantWords(invoiceDesc);
-
-      // Invoice must contain all significant words from LC
-      for (const word of lcWords) {
-        if (!invoiceWords.has(word)) {
-          return false;
-        }
-      }
-      return true;
-    };
-
-    // UCP 600 Article 19: B/L can use general terms "not inconsistent" with LC
-    // More lenient - just check it's not contradictory
-    const blConsistentWithLC = (lcDesc: string, blDesc: string): boolean => {
-      // B/L fails only if it describes a completely different product
-      return !isContradictory(lcDesc, blDesc);
     };
 
     if (goodsDescriptions.length >= 2) {
       const lcGoods = goodsDescriptions.find(g => g.docType === "letter_of_credit");
 
       if (lcGoods) {
-        const issues: { doc: string; severity: "critical" | "major"; reason: string }[] = [];
+        // Compare all docs against LC in parallel
+        const docsToCompare = goodsDescriptions.filter(g => g.docType !== "letter_of_credit");
 
-        for (const g of goodsDescriptions) {
-          if (g.docType === "letter_of_credit") continue;
+        const comparisons = await Promise.all(
+          docsToCompare.map(async (g) => {
+            const docType = (g.docType === "commercial_invoice" || g.docType === "packing_list")
+              ? "invoice" as const
+              : "bl" as const;
 
-          if (g.docType === "commercial_invoice" || g.docType === "packing_list") {
-            // Strict: UCP 600 Article 18(c)
-            if (!invoiceCorrespondsToLC(lcGoods.value, g.value)) {
-              issues.push({
-                doc: g.doc,
-                severity: "critical",
-                reason: `${g.doc} description "${g.value}" missing key terms from LC "${lcGoods.value}"`
-              });
-            }
-          } else if (g.docType === "bill_of_lading") {
-            // Lenient: UCP 600 Article 19
-            if (!blConsistentWithLC(lcGoods.value, g.value)) {
-              issues.push({
-                doc: g.doc,
-                severity: "major",
-                reason: `${g.doc} describes different product than LC`
-              });
-            }
-          }
-        }
+            const result = await compareGoodsDescriptions(lcGoods.value, g.value, docType);
+
+            return {
+              doc: g.doc,
+              docType: g.docType,
+              severity: (docType === "invoice" ? "critical" : "major") as "critical" | "major",
+              matches: result.matches,
+              reason: result.reason || `${g.doc} doesn't match LC goods description`
+            };
+          })
+        );
+
+        const issues = comparisons.filter(c => !c.matches);
 
         if (issues.length > 0) {
-          // Use highest severity among issues
           const hasCritical = issues.some(i => i.severity === "critical");
           crossRefIssues.push({
             field: "goodsDescription",

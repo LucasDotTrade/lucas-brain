@@ -1,186 +1,106 @@
 #!/usr/bin/env npx tsx
 /**
- * Test goods description cross-reference logic
+ * Test goods description cross-reference logic using Haiku
  * Run: npx tsx scripts/test-goods-description.ts
+ *
+ * NOTE: This now tests against Haiku LLM for semantic comparison.
+ * The old hardcoded category logic has been replaced.
  */
 
-// Replicate the logic from package-validation.ts for testing
-const extractSignificantWords = (desc: string): Set<string> => {
-  const normalized = desc.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+import Anthropic from "@anthropic-ai/sdk";
 
-  const fillerWords = new Set(["of", "the", "and", "or", "for", "in", "on", "at", "to", "from", "with"]);
+const client = new Anthropic();
 
-  return new Set(
-    normalized.split(" ")
-      .filter(w => w.length > 1 && !fillerWords.has(w))
-  );
-};
+// Replicate the Haiku comparison logic from package-validation.ts
+async function compareGoodsDescriptions(
+  lcDesc: string,
+  otherDesc: string,
+  docType: "invoice" | "bl"
+): Promise<{ matches: boolean; reason?: string }> {
+  const rule = docType === "invoice"
+    ? "UCP 600 Article 18(c): Invoice must 'correspond' with LC - all key product descriptors (grade, type, specification) must match. Missing descriptors = mismatch."
+    : "UCP 600 Article 19: B/L can use general terms, only fails if describing a completely different product category.";
 
-const isContradictory = (lcDesc: string, otherDesc: string): boolean => {
-  const lcWords = extractSignificantWords(lcDesc);
-  const otherWords = extractSignificantWords(otherDesc);
+  const prompt = `Compare these goods descriptions for a Letter of Credit presentation.
 
-  const productCategories = [
-    ["crude", "oil", "petroleum"],
-    ["beef", "meat", "cattle"],
-    ["chicken", "poultry"],
-    ["fish", "seafood", "salmon", "tuna"],
-    ["rice", "grain", "wheat", "corn"],
-    ["sugar", "sweetener"],
-    ["coffee", "cocoa"],
-    ["steel", "iron", "metal"],
-    ["cotton", "textile", "fabric"],
-  ];
+LC description: "${lcDesc}"
+${docType === "invoice" ? "Invoice" : "B/L"} description: "${otherDesc}"
 
-  let lcCategory: string[] | null = null;
-  for (const category of productCategories) {
-    if (category.some(word => lcWords.has(word))) {
-      lcCategory = category;
-      break;
-    }
+Rule: ${rule}
+
+Examples:
+- LC "MURBAN CRUDE OIL" vs Invoice "CRUDE OIL" → mismatch (invoice missing grade "MURBAN")
+- LC "MURBAN CRUDE OIL" vs B/L "CRUDE OIL" → match (B/L can use general terms)
+- LC "MURBAN CRUDE OIL" vs B/L "FROZEN BEEF" → mismatch (different product entirely)
+- LC "FROZEN BEEF CUTS" vs Invoice "BEEF CUTS FROZEN" → match (same words, different order)
+
+Respond with JSON only:
+{"matches": true or false, "reason": "one sentence explanation"}`;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 150,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const jsonStr = text.replace(/```json\n?|\n?```/g, "").trim();
+    const json = JSON.parse(jsonStr);
+    return { matches: Boolean(json.matches), reason: json.reason };
+  } catch (error) {
+    console.error("Haiku error:", error);
+    return { matches: false, reason: "Unable to verify - manual review recommended" };
   }
-
-  if (lcCategory) {
-    for (const category of productCategories) {
-      if (category === lcCategory) continue;
-      if (category.some(word => otherWords.has(word))) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-};
-
-const invoiceCorrespondsToLC = (lcDesc: string, invoiceDesc: string): boolean => {
-  const lcWords = extractSignificantWords(lcDesc);
-  const invoiceWords = extractSignificantWords(invoiceDesc);
-
-  for (const word of lcWords) {
-    if (!invoiceWords.has(word)) {
-      return false;
-    }
-  }
-  return true;
-};
-
-const blConsistentWithLC = (lcDesc: string, blDesc: string): boolean => {
-  return !isContradictory(lcDesc, blDesc);
-};
-
-// Test cases
-console.log("=== GOODS DESCRIPTION CROSS-REFERENCE TESTS ===\n");
-
-const tests = [
-  // Invoice tests (UCP 600 Article 18(c) - strict)
-  {
-    name: "Invoice exact match",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "MURBAN CRUDE OIL",
-    docType: "invoice",
-    expected: true,
-  },
-  {
-    name: "Invoice missing key term (murban)",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "CRUDE OIL",
-    docType: "invoice",
-    expected: false,
-  },
-  {
-    name: "Invoice with extra detail",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "MURBAN CRUDE OIL API 40.2 SULFUR 0.8%",
-    docType: "invoice",
-    expected: true,
-  },
-  {
-    name: "Invoice different word order",
-    lcDesc: "FROZEN BEEF CUTS",
-    otherDesc: "BEEF CUTS FROZEN",
-    docType: "invoice",
-    expected: true,
-  },
-  {
-    name: "Invoice case insensitive",
-    lcDesc: "Murban Crude Oil",
-    otherDesc: "MURBAN CRUDE OIL",
-    docType: "invoice",
-    expected: true,
-  },
-  {
-    name: "Invoice wrong product",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "FROZEN BEEF CUTS",
-    docType: "invoice",
-    expected: false,
-  },
-
-  // B/L tests (UCP 600 Article 19 - lenient)
-  {
-    name: "B/L exact match",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "MURBAN CRUDE OIL",
-    docType: "bl",
-    expected: true,
-  },
-  {
-    name: "B/L general terms (OK per UCP 600)",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "CRUDE OIL",
-    docType: "bl",
-    expected: true,  // This is the key difference from invoice
-  },
-  {
-    name: "B/L very general terms",
-    lcDesc: "MURBAN CRUDE OIL API 40.2",
-    otherDesc: "PETROLEUM PRODUCTS",
-    docType: "bl",
-    expected: true,  // Same category, not contradictory
-  },
-  {
-    name: "B/L contradictory product",
-    lcDesc: "MURBAN CRUDE OIL",
-    otherDesc: "FROZEN BEEF",
-    docType: "bl",
-    expected: false,  // Different category = contradiction
-  },
-  {
-    name: "B/L contradictory product 2",
-    lcDesc: "JAPANESE KOBE BEEF A5",
-    otherDesc: "SALMON FILLETS",
-    docType: "bl",
-    expected: false,  // Beef vs fish
-  },
-];
-
-let passed = 0;
-let failed = 0;
-
-for (const test of tests) {
-  let result: boolean;
-  if (test.docType === "invoice") {
-    result = invoiceCorrespondsToLC(test.lcDesc, test.otherDesc);
-  } else {
-    result = blConsistentWithLC(test.lcDesc, test.otherDesc);
-  }
-
-  const status = result === test.expected ? "✅" : "❌";
-  if (result === test.expected) {
-    passed++;
-  } else {
-    failed++;
-  }
-
-  console.log(`${status} ${test.name}`);
-  console.log(`   LC: "${test.lcDesc}"`);
-  console.log(`   ${test.docType === "invoice" ? "Invoice" : "B/L"}: "${test.otherDesc}"`);
-  console.log(`   Expected: ${test.expected ? "MATCH" : "MISMATCH"}, Got: ${result ? "MATCH" : "MISMATCH"}`);
-  console.log("");
 }
 
-console.log("=================================");
-console.log(`Results: ${passed} passed, ${failed} failed`);
+// Test cases
+const tests = [
+  // Invoice tests (UCP 600 Article 18(c) - strict)
+  { name: "Invoice exact match", lcDesc: "MURBAN CRUDE OIL", otherDesc: "MURBAN CRUDE OIL", docType: "invoice" as const, expected: true },
+  { name: "Invoice missing grade", lcDesc: "MURBAN CRUDE OIL", otherDesc: "CRUDE OIL", docType: "invoice" as const, expected: false },
+  { name: "Invoice with extra detail", lcDesc: "MURBAN CRUDE OIL", otherDesc: "MURBAN CRUDE OIL API 40.2", docType: "invoice" as const, expected: true },
+  { name: "Invoice different word order", lcDesc: "FROZEN BEEF CUTS", otherDesc: "BEEF CUTS FROZEN", docType: "invoice" as const, expected: true },
+  { name: "Invoice wrong product", lcDesc: "MURBAN CRUDE OIL", otherDesc: "FROZEN BEEF", docType: "invoice" as const, expected: false },
+
+  // B/L tests (UCP 600 Article 19 - lenient)
+  { name: "B/L exact match", lcDesc: "MURBAN CRUDE OIL", otherDesc: "MURBAN CRUDE OIL", docType: "bl" as const, expected: true },
+  { name: "B/L general terms OK", lcDesc: "MURBAN CRUDE OIL", otherDesc: "CRUDE OIL", docType: "bl" as const, expected: true },
+  { name: "B/L very general terms", lcDesc: "MURBAN CRUDE OIL", otherDesc: "PETROLEUM PRODUCTS", docType: "bl" as const, expected: true },
+  { name: "B/L contradictory product", lcDesc: "MURBAN CRUDE OIL", otherDesc: "FROZEN BEEF", docType: "bl" as const, expected: false },
+
+  // Edge cases that hardcoded logic couldn't handle
+  { name: "Electronics (no hardcoded category)", lcDesc: "ELECTRONIC COMPONENTS", otherDesc: "FROZEN BEEF", docType: "bl" as const, expected: false },
+  { name: "Plural handling", lcDesc: "CRUDE OILS", otherDesc: "CRUDE OIL", docType: "invoice" as const, expected: true },
+  { name: "Brand name handling", lcDesc: "A5 WAGYU BEEF", otherDesc: "JAPANESE BEEF", docType: "bl" as const, expected: true },
+];
+
+async function runTests() {
+  console.log("=== GOODS DESCRIPTION CROSS-REFERENCE TESTS (HAIKU) ===\n");
+
+  let passed = 0;
+  let failed = 0;
+
+  for (const test of tests) {
+    const result = await compareGoodsDescriptions(test.lcDesc, test.otherDesc, test.docType);
+    const status = result.matches === test.expected ? "✅" : "❌";
+
+    if (result.matches === test.expected) {
+      passed++;
+    } else {
+      failed++;
+    }
+
+    console.log(`${status} ${test.name}`);
+    console.log(`   LC: "${test.lcDesc}"`);
+    console.log(`   ${test.docType === "invoice" ? "Invoice" : "B/L"}: "${test.otherDesc}"`);
+    console.log(`   Expected: ${test.expected ? "MATCH" : "MISMATCH"}, Got: ${result.matches ? "MATCH" : "MISMATCH"}`);
+    console.log(`   Reason: ${result.reason}`);
+    console.log("");
+  }
+
+  console.log("=================================");
+  console.log(`Results: ${passed} passed, ${failed} failed`);
+}
+
+runTests().catch(console.error);
