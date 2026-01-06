@@ -179,6 +179,67 @@ const crossReferenceStep = createStep({
       return val.toLowerCase().replace(/[^a-z0-9]/g, "");
     };
 
+    // Helper to extract core port name (for fuzzy matching)
+    // "JEBEL DHANNA, ABU DHABI, UAE" -> "jebel dhanna"
+    // "JEBEL DHANNA TERMINAL" -> "jebel dhanna"
+    // "MINA AL AHMADI, KUWAIT" -> "mina al ahmadi"
+    const extractCorePort = (val: string | undefined): string => {
+      if (!val) return "";
+      let port = val.toLowerCase().trim();
+      // Remove country suffixes
+      port = port.replace(/,?\s*(uae|india|china|kuwait|qatar|saudi arabia|oman|bahrain|singapore|malaysia|indonesia|usa|uk|germany|netherlands|france|italy|spain)\.?$/i, "");
+      // Remove common suffixes
+      port = port.replace(/\s*(terminal|port|harbour|harbor|anchorage|roadstead)\.?$/i, "");
+      // Take text before first comma (e.g., "JEBEL DHANNA, ABU DHABI" -> "JEBEL DHANNA")
+      port = port.split(",")[0].trim();
+      // Normalize whitespace
+      port = port.replace(/\s+/g, " ");
+      return port;
+    };
+
+    // Check if two port names likely refer to the same port
+    const portsMatch = (port1: string, port2: string): boolean => {
+      const core1 = extractCorePort(port1);
+      const core2 = extractCorePort(port2);
+      if (!core1 || !core2) return true; // Empty = no mismatch
+      if (core1 === core2) return true;
+      // Check if one contains the other (handles "JEBEL DHANNA" vs "JEBEL DHANNA FREE ZONE")
+      if (core1.includes(core2) || core2.includes(core1)) return true;
+      // Check first two words match (handles minor variations)
+      const words1 = core1.split(" ").slice(0, 2).join(" ");
+      const words2 = core2.split(" ").slice(0, 2).join(" ");
+      if (words1 === words2 && words1.length >= 4) return true;
+      return false;
+    };
+
+    // Extract core company name (remove legal suffixes)
+    // "ADNOC TRADING LLC" -> "adnoc trading"
+    // "KPC TRADING LIMITED" -> "kpc trading"
+    const extractCoreName = (val: string | undefined): string => {
+      if (!val) return "";
+      let name = val.toLowerCase().trim();
+      // Remove legal entity suffixes
+      name = name.replace(/\s*(llc|ltd|limited|inc|incorporated|corp|corporation|co|company|plc|gmbh|ag|sa|srl|bv|nv|pty|pvt|private)\.?$/gi, "");
+      // Remove trailing punctuation
+      name = name.replace(/[.,;:]+$/, "").trim();
+      return name;
+    };
+
+    // Check if two names likely refer to the same entity
+    const namesMatch = (name1: string, name2: string): boolean => {
+      const core1 = extractCoreName(name1);
+      const core2 = extractCoreName(name2);
+      if (!core1 || !core2) return true; // Empty = no mismatch
+      if (core1 === core2) return true;
+      // Check if one contains the other
+      if (core1.includes(core2) || core2.includes(core1)) return true;
+      // Check normalized versions (no spaces/punctuation)
+      const norm1 = core1.replace(/[^a-z0-9]/g, "");
+      const norm2 = core2.replace(/[^a-z0-9]/g, "");
+      if (norm1 === norm2) return true;
+      return false;
+    };
+
     // Helper to extract numeric amount
     const extractAmount = (val: string | undefined): number | null => {
       if (!val) return null;
@@ -230,11 +291,11 @@ const crossReferenceStep = createStep({
       }
     }
 
-    // Check port of loading consistency
+    // Check port of loading consistency (using fuzzy matching)
     if (portsOfLoading.length >= 2) {
-      const normalized = portsOfLoading.map((p) => normalize(p.value));
-      const unique = [...new Set(normalized)];
-      if (unique.length > 1) {
+      const basePort = portsOfLoading[0].value;
+      const mismatches = portsOfLoading.filter((p) => !portsMatch(basePort, p.value));
+      if (mismatches.length > 0) {
         crossRefIssues.push({
           field: "portOfLoading",
           documents: portsOfLoading.map((p) => p.doc),
@@ -245,11 +306,11 @@ const crossReferenceStep = createStep({
       }
     }
 
-    // Check port of discharge consistency
+    // Check port of discharge consistency (using fuzzy matching)
     if (portsOfDischarge.length >= 2) {
-      const normalized = portsOfDischarge.map((p) => normalize(p.value));
-      const unique = [...new Set(normalized)];
-      if (unique.length > 1) {
+      const basePort = portsOfDischarge[0].value;
+      const mismatches = portsOfDischarge.filter((p) => !portsMatch(basePort, p.value));
+      if (mismatches.length > 0) {
         crossRefIssues.push({
           field: "portOfDischarge",
           documents: portsOfDischarge.map((p) => p.doc),
@@ -270,9 +331,9 @@ const crossReferenceStep = createStep({
     }
 
     if (beneficiaries.length >= 2) {
-      const normalized = beneficiaries.map((b) => normalize(b.value));
-      const unique = [...new Set(normalized)];
-      if (unique.length > 1) {
+      const baseName = beneficiaries[0].value;
+      const mismatches = beneficiaries.filter((b) => !namesMatch(baseName, b.value));
+      if (mismatches.length > 0) {
         crossRefIssues.push({
           field: "beneficiary",
           documents: beneficiaries.map((b) => b.doc),
