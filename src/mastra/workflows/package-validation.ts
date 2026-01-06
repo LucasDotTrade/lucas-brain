@@ -294,7 +294,13 @@ RULES:
 - Do NOT complain about missing LC/Invoice/B/L - those are separate documents in the package
 - Verdict GO = document is complete and internally consistent
 - Verdict WAIT = minor issues or missing optional fields
-- Verdict NO_GO = critical internal problems (corrupted, unsigned, invalid dates)`;
+- Verdict NO_GO = critical internal problems (corrupted, unsigned, invalid dates)
+
+CRITICAL FOR BENEFICIARY FIELD:
+- For LC: beneficiary = the seller/exporter receiving payment
+- For B/L: beneficiary = the SHIPPER (NOT the consignee - consignee is often "to order of bank")
+- For Invoice: beneficiary = the seller issuing the invoice
+- For Certificates: beneficiary = the party who requested/benefits from the certificate`;
 
     const response = await lucas.generate(prompt, {
       resourceId: inputData.clientEmail,
