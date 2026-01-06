@@ -906,9 +906,53 @@ Respond with JSON only:
           });
         }
       }
+
+      // Cross-reference vessel name (if LC specifies one)
+      if (lc?.extractedData.vesselName && bl?.extractedData.vesselName) {
+        const lcVessel = lc.extractedData.vesselName.toLowerCase().trim();
+        const blVessel = bl.extractedData.vesselName.toLowerCase().trim();
+
+        // Check if vessels match (allow for minor variations like "MV" prefix)
+        const normalizeVessel = (v: string) => v.replace(/^(mv|m\/v|mt|m\.v\.)\s*/i, "").trim();
+        const lcVesselNorm = normalizeVessel(lcVessel);
+        const blVesselNorm = normalizeVessel(blVessel);
+
+        if (lcVesselNorm !== blVesselNorm && !blVesselNorm.includes(lcVesselNorm) && !lcVesselNorm.includes(blVesselNorm)) {
+          crossRefIssues.push({
+            field: "vesselName",
+            documents: ["LC", "B/L"],
+            values: [`LC Vessel: ${lc.extractedData.vesselName}`, `B/L Vessel: ${bl.extractedData.vesselName}`],
+            severity: "major",
+            description: `Vessel name mismatch - LC specifies "${lc.extractedData.vesselName}" but B/L shows "${bl.extractedData.vesselName}"`,
+          });
+        }
+      }
+
+      // Cross-reference insurance value (must be >= 110% of invoice/LC amount)
+      const insuranceCert = documentResults.find((d) => d.type === "insurance_certificate");
+      if (insuranceCert?.extractedData.insuredValue) {
+        const insuredAmt = extractAmount(insuranceCert.extractedData.insuredValue);
+        const invoiceAmt = invoice?.extractedData.amount ? extractAmount(invoice.extractedData.amount) : null;
+        const lcAmt = lc?.extractedData.amount ? extractAmount(lc.extractedData.amount) : null;
+        const referenceAmt = invoiceAmt || lcAmt;
+
+        if (insuredAmt && referenceAmt) {
+          const minRequired = referenceAmt * 1.10; // 110% minimum
+          if (insuredAmt < minRequired) {
+            const coverage = ((insuredAmt / referenceAmt) * 100).toFixed(0);
+            crossRefIssues.push({
+              field: "insuranceValue",
+              documents: ["Insurance Certificate", invoice ? "Invoice" : "LC"],
+              values: [`Insured: ${insuranceCert.extractedData.insuredValue}`, `Reference: ${invoice?.extractedData.amount || lc?.extractedData.amount}`],
+              severity: "major",
+              description: `Insurance coverage insufficient - ${coverage}% of value (minimum 110% required for LC presentation)`,
+            });
+          }
+        }
+      }
     }
 
-    /// Non-LC mode: Check customs/export readiness instead of LC compliance
+    // Non-LC mode: Check customs/export readiness instead of LC compliance
     if (paymentMode === "no_lc") {
       const hasInvoice = documentResults.some((d) => d.type === "commercial_invoice");
       const hasBL = documentResults.some((d) => d.type === "bill_of_lading");
