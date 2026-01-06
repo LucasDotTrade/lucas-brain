@@ -699,6 +699,77 @@ const crossReferenceStep = createStep({
       }
     }
 
+    // Cross-reference goods description (UCP 600 Article 18(c))
+    // Invoice description must match LC exactly; B/L can be general
+    const goodsDescriptions: { doc: string; value: string }[] = [];
+
+    // Only check core commercial docs for goods description
+    const goodsDescRelevantDocTypes = [
+      "letter_of_credit",
+      "commercial_invoice",
+      "bill_of_lading",
+      "packing_list",
+    ];
+
+    for (const doc of documentResults) {
+      if (!goodsDescRelevantDocTypes.includes(doc.type)) continue;
+      const docName = doc.type.replace(/_/g, " ").toUpperCase();
+      if (isSpecified(doc.extractedData.goodsDescription)) {
+        goodsDescriptions.push({ doc: docName, value: doc.extractedData.goodsDescription! });
+      }
+    }
+
+    // Helper to normalize goods description for comparison
+    const normalizeGoods = (desc: string): string => {
+      return desc.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")  // Remove punctuation
+        .replace(/\s+/g, " ")          // Normalize whitespace
+        .trim();
+    };
+
+    // Helper to check if goods descriptions match (LC is the reference)
+    const goodsMatch = (lcDesc: string, otherDesc: string): boolean => {
+      const lcNorm = normalizeGoods(lcDesc);
+      const otherNorm = normalizeGoods(otherDesc);
+
+      if (lcNorm === otherNorm) return true;
+
+      // Check if other contains all key words from LC
+      // E.g., LC: "MURBAN CRUDE OIL" should match Invoice: "MURBAN CRUDE OIL API 40.2"
+      const lcWords = lcNorm.split(" ").filter(w => w.length > 2);
+      const otherWords = otherNorm.split(" ");
+      const allLcWordsPresent = lcWords.every(word => otherWords.includes(word));
+
+      if (allLcWordsPresent) return true;
+
+      // Check if LC desc is contained in other (other has more detail)
+      if (otherNorm.includes(lcNorm)) return true;
+
+      return false;
+    };
+
+    if (goodsDescriptions.length >= 2) {
+      // LC description is the reference per UCP 600
+      const lcGoods = goodsDescriptions.find(g => g.doc === "LETTER OF CREDIT");
+
+      if (lcGoods) {
+        const mismatches = goodsDescriptions.filter(g => {
+          if (g.doc === "LETTER OF CREDIT") return false; // Don't compare LC to itself
+          return !goodsMatch(lcGoods.value, g.value);
+        });
+
+        if (mismatches.length > 0) {
+          crossRefIssues.push({
+            field: "goodsDescription",
+            documents: goodsDescriptions.map((g) => g.doc),
+            values: goodsDescriptions.map((g) => `${g.doc}: ${g.value}`),
+            severity: "critical",
+            description: `Goods description mismatch - UCP 600 Article 18(c) requires invoice to match LC exactly`,
+          });
+        }
+      }
+    }
+
     return {
       crossRefIssues,
       documentResults,
