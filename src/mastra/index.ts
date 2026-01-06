@@ -1,6 +1,6 @@
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
-import { lucasAgent } from "./agents";
+import { lucasAgent, haikuExtractor } from "./agents";
 import { documentReviewWorkflow } from "./workflows/document-review";
 import { packageValidationWorkflow } from "./workflows/package-validation";
 
@@ -9,7 +9,7 @@ const storage = new PostgresStore({
 });
 
 export const mastra = new Mastra({
-  agents: { lucasAgent },
+  agents: { lucasAgent, haikuExtractor },
   workflows: { documentReviewWorkflow, packageValidationWorkflow },
   storage,
   observability: {

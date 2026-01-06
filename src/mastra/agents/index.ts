@@ -240,4 +240,26 @@ export const lucasAgent = new Agent({
   },
 });
 
+// Haiku Extractor Agent - for fast/cheap document extraction
+// Used in package-validation workflow to extract data before cross-reference
+// Cost: ~$0.0005/doc vs ~$0.015+/doc with Sonnet
+export const haikuExtractor = new Agent({
+  name: "HaikuExtractor",
+  instructions: {
+    role: "system",
+    content: `You are a trade document data extractor. Extract structured data from documents accurately.
+Rules:
+- Extract ALL fields present in the document
+- Use null for missing fields, not guesses
+- Dates must be ISO format: YYYY-MM-DD
+- Be precise with amounts, quantities, and names`,
+    providerOptions: {
+      anthropic: { cacheControl: { type: "ephemeral" } }
+    }
+  },
+  model: "anthropic/claude-3-5-haiku-20241022",
+  // No memory needed - pure extraction
+  // No tools needed - just returns JSON
+});
+
 export const weatherAgent = lucasAgent;
