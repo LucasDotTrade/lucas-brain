@@ -48,6 +48,7 @@ const extractedDataSchema = z.object({
   quantity: z.string().optional(),
   weight: z.string().optional(),
   expiryDate: z.string().optional(),
+  latestShipmentDate: z.string().optional(),
   shipmentDate: z.string().optional(),
   vesselName: z.string().optional(),
   blNumber: z.string().optional(),
@@ -142,7 +143,8 @@ Respond in this EXACT JSON format:
     "quantity": "500 MT",
     "weight": "500,000 KG",
     "expiryDate": "2024-03-15",
-    "shipmentDate": "2024-02-28",
+    "latestShipmentDate": "2024-03-10 (from LC - latest date for shipment)",
+    "shipmentDate": "2024-02-28 (actual shipment date from B/L)",
     "vesselName": "MV Ocean Star",
     "blNumber": "BL-2024-001",
     "lcNumber": "LC-2024-00456",
@@ -446,6 +448,60 @@ const crossReferenceStep = createStep({
           values: [`LC Expiry: ${lc.extractedData.expiryDate}`, `Today: ${today.toISOString().split('T')[0]}`],
           severity: "critical",
           description: `LC expired on ${lc.extractedData.expiryDate} - cannot present documents`,
+        });
+      }
+    }
+
+    // Check if shipment is after LC latest shipment date
+    if (bl?.extractedData.shipmentDate && lc?.extractedData.latestShipmentDate) {
+      const shipDate = new Date(bl.extractedData.shipmentDate);
+      const latestDate = new Date(lc.extractedData.latestShipmentDate);
+      if (!isNaN(shipDate.getTime()) && !isNaN(latestDate.getTime()) && shipDate > latestDate) {
+        crossRefIssues.push({
+          field: "lateShipment",
+          documents: ["LC", "B/L"],
+          values: [`LC Latest Shipment: ${lc.extractedData.latestShipmentDate}`, `B/L Shipped: ${bl.extractedData.shipmentDate}`],
+          severity: "critical",
+          description: `Shipment date ${bl.extractedData.shipmentDate} is after LC latest shipment date ${lc.extractedData.latestShipmentDate} - bank will reject`,
+        });
+      }
+    }
+
+    // Cross-reference quantities across documents
+    const quantities: { doc: string; value: string; numeric: number }[] = [];
+    const extractQty = (val: string | undefined): number | null => {
+      if (!val) return null;
+      // Extract numeric value, handling formats like "432,850 BARRELS", "500 MT", "68,500.00 MT"
+      const match = val.replace(/,/g, "").match(/([\d.]+)/);
+      return match ? parseFloat(match[1]) : null;
+    };
+
+    for (const doc of documentResults) {
+      const docName = doc.type.replace(/_/g, " ").toUpperCase();
+      if (isSpecified(doc.extractedData.quantity)) {
+        const qty = extractQty(doc.extractedData.quantity);
+        if (qty && qty > 0) {
+          quantities.push({ doc: docName, value: doc.extractedData.quantity!, numeric: qty });
+        }
+      }
+    }
+
+    if (quantities.length >= 2) {
+      // Check if quantities vary by more than 5% (typical LC tolerance)
+      const baseQty = quantities[0].numeric;
+      const tolerance = 0.05;
+      const mismatches = quantities.filter((q) => {
+        const diff = Math.abs(q.numeric - baseQty) / baseQty;
+        return diff > tolerance;
+      });
+
+      if (mismatches.length > 0) {
+        crossRefIssues.push({
+          field: "quantity",
+          documents: quantities.map((q) => q.doc),
+          values: quantities.map((q) => `${q.doc}: ${q.value}`),
+          severity: "major",
+          description: `Quantity mismatch across documents (exceeds 5% tolerance)`,
         });
       }
     }
