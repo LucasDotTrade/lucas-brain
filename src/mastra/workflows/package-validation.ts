@@ -307,6 +307,8 @@ SPECIAL EXTRACTION RULES:
 - quantityTolerance: ONLY from LC - look for "+/- X%", "X PCT MORE OR LESS", or field 39A tolerance
 - shippedOnBoard: ONLY from B/L - true if "SHIPPED ON BOARD" or "LADEN ON BOARD" appears, false if only "RECEIVED FOR SHIPMENT"
 - issuingBank: ONLY from LC - the bank that issued the credit
+- vesselName: From LC if specified (look for "Vessel:", "Intended Vessel:", "Nominated Vessel:"). From B/L always (look for "Vessel:", "Ship:", "MV", "MT")
+- insuredValue: ONLY from Insurance Certificate - look for "Sum Insured:", "Amount Insured:", "Insured Value:", or "Coverage Amount:"
 
 RULES:
 - Extract ALL fields present in the document
