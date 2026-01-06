@@ -186,6 +186,12 @@ const extractedDataSchema = z.object({
   loadingDate: z.string().optional(),
   insuredValue: z.string().optional(),
   certificateNumber: z.string().optional(),
+  // New fields for O&G validation
+  requiredInspectionCompany: z.string().optional(), // From LC: "SGS" or "Bureau Veritas"
+  consignee: z.string().optional(),                 // From B/L: "TO ORDER OF BANK X"
+  quantityTolerance: z.string().optional(),         // From LC: "+/- 10%" or "5 PCT MORE OR LESS"
+  shippedOnBoard: z.boolean().optional(),           // From B/L: true if "SHIPPED ON BOARD" present
+  issuingBank: z.string().optional(),               // From LC: bank that issued the LC
 });
 
 const documentResultSchema = z.object({
@@ -285,10 +291,22 @@ Respond in this EXACT JSON format:
     "inspectionCompany": "SGS",
     "loadingDate": "2024-02-28",
     "insuredValue": "USD 137,500.00",
-    "certificateNumber": "SGS-2024-001"
+    "certificateNumber": "SGS-2024-001",
+    "requiredInspectionCompany": "SGS",
+    "consignee": "TO ORDER OF NATIONAL BANK OF KUWAIT",
+    "quantityTolerance": "+/- 10%",
+    "shippedOnBoard": true,
+    "issuingBank": "NATIONAL BANK OF KUWAIT"
   },
   "analysis": "Brief analysis of this document's completeness and any internal issues."
 }
+
+SPECIAL EXTRACTION RULES:
+- requiredInspectionCompany: ONLY from LC - look for "inspection by SGS" or "certificate issued by Bureau Veritas"
+- consignee: ONLY from B/L - extract the "TO ORDER OF [BANK]" or "CONSIGNEE: [NAME]" field
+- quantityTolerance: ONLY from LC - look for "+/- X%", "X PCT MORE OR LESS", or field 39A tolerance
+- shippedOnBoard: ONLY from B/L - true if "SHIPPED ON BOARD" or "LADEN ON BOARD" appears, false if only "RECEIVED FOR SHIPMENT"
+- issuingBank: ONLY from LC - the bank that issued the credit
 
 RULES:
 - Extract ALL fields present in the document
@@ -680,9 +698,21 @@ const crossReferenceStep = createStep({
     }
 
     if (quantities.length >= 2) {
-      // Check if quantities vary by more than 5% (typical LC tolerance)
+      // Extract tolerance from LC if specified, otherwise default to 5%
+      let tolerance = 0.05; // Default UCP 600 tolerance
+      let toleranceSource = "UCP 600 default 5%";
+
+      if (lc?.extractedData.quantityTolerance) {
+        const tolStr = lc.extractedData.quantityTolerance;
+        // Parse tolerance: "+/- 10%", "10 PCT", "5 PERCENT MORE OR LESS"
+        const tolMatch = tolStr.match(/([\d.]+)\s*(%|PCT|PERCENT)/i);
+        if (tolMatch) {
+          tolerance = parseFloat(tolMatch[1]) / 100;
+          toleranceSource = `LC specified ${tolStr}`;
+        }
+      }
+
       const baseQty = quantities[0].numeric;
-      const tolerance = 0.05;
       const mismatches = quantities.filter((q) => {
         const diff = Math.abs(q.numeric - baseQty) / baseQty;
         return diff > tolerance;
@@ -694,7 +724,7 @@ const crossReferenceStep = createStep({
           documents: quantities.map((q) => q.doc),
           values: quantities.map((q) => `${q.doc}: ${q.value}`),
           severity: "major",
-          description: `Quantity mismatch across documents (exceeds 5% tolerance)`,
+          description: `Quantity mismatch across documents (exceeds ${(tolerance * 100).toFixed(0)}% tolerance - ${toleranceSource})`,
         });
       }
     }
@@ -805,6 +835,70 @@ Respond with JSON only:
           });
         }
       }
+    }
+
+    // Cross-reference inspection company (if LC specifies one)
+    if (lc?.extractedData.requiredInspectionCompany) {
+      const requiredCompany = lc.extractedData.requiredInspectionCompany.toLowerCase();
+      const inspectionDocs = documentResults.filter(d =>
+        ["inspection_certificate", "certificate_of_quality", "certificate_of_quantity"].includes(d.type) &&
+        isSpecified(d.extractedData.inspectionCompany)
+      );
+
+      for (const doc of inspectionDocs) {
+        const actualCompany = doc.extractedData.inspectionCompany!.toLowerCase();
+        // Check if required company name appears in actual company
+        if (!actualCompany.includes(requiredCompany) && !requiredCompany.includes(actualCompany)) {
+          crossRefIssues.push({
+            field: "inspectionCompany",
+            documents: ["LC", doc.type.replace(/_/g, " ").toUpperCase()],
+            values: [`LC requires: ${lc.extractedData.requiredInspectionCompany}`, `${doc.type.replace(/_/g, " ")}: ${doc.extractedData.inspectionCompany}`],
+            severity: "critical",
+            description: `LC requires inspection by ${lc.extractedData.requiredInspectionCompany} but certificate issued by ${doc.extractedData.inspectionCompany}`,
+          });
+        }
+      }
+    }
+
+    // Cross-reference consignee/order party (B/L must be to order of issuing bank)
+    if (bl?.extractedData.consignee && lc?.extractedData.issuingBank) {
+      const consignee = bl.extractedData.consignee.toLowerCase();
+      const issuingBank = lc.extractedData.issuingBank.toLowerCase();
+
+      // B/L should be "to order" or "to order of [issuing bank]"
+      const isToOrder = consignee.includes("to order");
+      const mentionsIssuingBank = consignee.includes(issuingBank) ||
+        issuingBank.split(" ").some(word => word.length > 3 && consignee.includes(word));
+
+      if (!isToOrder) {
+        crossRefIssues.push({
+          field: "consignee",
+          documents: ["B/L", "LC"],
+          values: [`B/L Consignee: ${bl.extractedData.consignee}`, `LC Issuing Bank: ${lc.extractedData.issuingBank}`],
+          severity: "critical",
+          description: `B/L not made "to order" - should be "TO ORDER" or "TO ORDER OF ${lc.extractedData.issuingBank}" for LC presentation`,
+        });
+      } else if (consignee.includes("to order of") && !mentionsIssuingBank) {
+        // B/L is "to order of [someone]" but not the issuing bank
+        crossRefIssues.push({
+          field: "consignee",
+          documents: ["B/L", "LC"],
+          values: [`B/L Consignee: ${bl.extractedData.consignee}`, `LC Issuing Bank: ${lc.extractedData.issuingBank}`],
+          severity: "major",
+          description: `B/L made to order of wrong party - should be "TO ORDER OF ${lc.extractedData.issuingBank}"`,
+        });
+      }
+    }
+
+    // Check for shipped-on-board notation (critical for oil trade)
+    if (bl && bl.extractedData.shippedOnBoard === false) {
+      crossRefIssues.push({
+        field: "shippedOnBoard",
+        documents: ["B/L"],
+        values: ["B/L: RECEIVED FOR SHIPMENT (not shipped on board)"],
+        severity: "critical",
+        description: `B/L is "Received for Shipment" without shipped-on-board notation - bank will reject. Need dated on-board notation with vessel name.`,
+      });
     }
 
     return {
