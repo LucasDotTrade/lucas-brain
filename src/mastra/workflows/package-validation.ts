@@ -435,6 +435,21 @@ const crossReferenceStep = createStep({
       }
     }
 
+    // Check if LC is expired (expiry date < today)
+    if (lc?.extractedData.expiryDate) {
+      const expDate = new Date(lc.extractedData.expiryDate);
+      const today = new Date();
+      if (!isNaN(expDate.getTime()) && expDate < today) {
+        crossRefIssues.push({
+          field: "lcExpiry",
+          documents: ["LC"],
+          values: [`LC Expiry: ${lc.extractedData.expiryDate}`, `Today: ${today.toISOString().split('T')[0]}`],
+          severity: "critical",
+          description: `LC expired on ${lc.extractedData.expiryDate} - cannot present documents`,
+        });
+      }
+    }
+
     return {
       crossRefIssues,
       documentResults,
