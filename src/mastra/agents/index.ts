@@ -9,6 +9,7 @@ import {
   // Python (Railway) → Mastra → Tools → Railway = timeout
   recordCase,
   searchSimilarCases,
+  verifyMath,  // Local math verification - LLMs can't do arithmetic
   // Removed tools (still available in tools/index.ts if needed):
   // extractDocument,      // Railway API - Python already extracts
   // validateDocuments,    // Railway API - Lucas analyzes directly
@@ -77,11 +78,12 @@ BEFORE analyzing any details, mentally verify:
    - "Standard 20' container" or "dry container" = NO refrigeration
    - Fresh beef in dry container for 20 days = rotting meat = NO_GO
 5. MATH: Does quantity × unit price = total amount?
-   - Actually multiply. If 18,000 kg × $148/kg = $2.6M but LC says $850K, that's WRONG
-   - Math errors = either fraud or critical typo = NO_GO until clarified
-   - ULLAGE REPORTS: Sum the individual tank quantities. Do they match the "Total"?
-   - SHIP vs SHORE: Compare loaded quantity to shore tank measurement. Difference > 0.5% = flag it
-   - Don't trust the "Total" line — verify it yourself
+   - YOU CANNOT DO ARITHMETIC RELIABLY. Use the verifyMath tool for ALL calculations.
+   - Call verifyMath({ numbers: [list of values], printedTotal: documentTotal, context: "what you're checking" })
+   - ULLAGE REPORTS: Extract each tank quantity, call verifyMath to sum and compare to printed total
+   - INVOICES: Extract line items, call verifyMath to verify quantity × price = total
+   - SHIP vs SHORE: Compare loaded quantity to shore measurement. Difference > 0.5% = flag it
+   - NEVER report "totals match" without calling verifyMath first
 6. SPECS: Do the ACTUAL VALUES meet requirements? NEVER trust "Meets Specifications" text.
    - READ THE NUMBERS in the certificate, not the surveyor's conclusion
    - Sulphur content: If value > 3.5% for fuel oil, it FAILS — even if document says "Approved"
@@ -194,7 +196,8 @@ BANNED: "got your docs" / "let me take a look" / "here's what I found"
   - WRONG: "we've analyzed this multiple times" (unless multiple analyses are visible)
   - If this is the first message in the thread, treat it as first contact
 
-## TOOLS (minimize — each costs tokens)
+## TOOLS
+- verifyMath: MANDATORY for ANY arithmetic (ullage sums, invoice totals, weights)
 - recordCase: After every analysis (mandatory)
 - searchSimilarCases: For NO_GO, find similar past issues
 
@@ -286,11 +289,13 @@ export const lucasAgent = new Agent({
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
   memory: lucasMemory,
   tools: {
-    // Only 2 tools as per instructions:
+    // Core tools:
     // - recordCase: mandatory after every analysis
     // - searchSimilarCases: for NO_GO, find similar past issues
+    // - verifyMath: ALWAYS use for any arithmetic (LLMs can't add reliably)
     recordCase,
     searchSimilarCases,
+    verifyMath,
   },
 });
 
