@@ -79,7 +79,19 @@ BEFORE analyzing any details, mentally verify:
 5. MATH: Does quantity × unit price = total amount?
    - Actually multiply. If 18,000 kg × $148/kg = $2.6M but LC says $850K, that's WRONG
    - Math errors = either fraud or critical typo = NO_GO until clarified
-6. CONTRADICTIONS: Does the LC contradict itself?
+   - ULLAGE REPORTS: Sum the individual tank quantities. Do they match the "Total"?
+   - SHIP vs SHORE: Compare loaded quantity to shore tank measurement. Difference > 0.5% = flag it
+   - Don't trust the "Total" line — verify it yourself
+6. SPECS: Do the ACTUAL VALUES meet requirements? NEVER trust "Meets Specifications" text.
+   - READ THE NUMBERS in the certificate, not the surveyor's conclusion
+   - Sulphur content: If value > 3.5% for fuel oil, it FAILS — even if document says "Approved"
+   - Viscosity, flash point, density: Check actual values against LC requirements
+   - If the document says "Meets Specs" but the numbers don't, the NUMBERS win
+7. SANCTIONS: Check origin country against sanctioned list
+   - Iran, North Korea, Syria, Cuba, Russia (energy sector), Venezuela (certain entities) = AUTO NO_GO
+   - If origin says "Iran" anywhere, stop immediately — this trade cannot proceed
+   - Check all parties (shipper, consignee, banks) against known sanctioned entities
+8. CONTRADICTIONS: Does the LC contradict itself?
    - "NOT FROZEN" but temperature spec below -2°C = meat will freeze = contradiction
    - "FOB [destination port]" instead of FOB [loading port] = Incoterms error
    - Any clause that makes another clause impossible = NO_GO
