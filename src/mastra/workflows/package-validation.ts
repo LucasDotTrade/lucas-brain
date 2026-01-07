@@ -239,6 +239,38 @@ const extractedDataSchema = z.object({
   invoiceDate: z.string().optional(),               // Invoice issue date
   issueDate: z.string().optional(),                 // Generic issue date for certificates
   inspectionDate: z.string().optional(),            // Inspection certificate date
+
+  // ============================================================
+  // LINE ITEM ARRAYS - For deterministic math verification
+  // LLMs extract the rows, JavaScript sums them
+  // ============================================================
+
+  // Packing List line items (for weight verification)
+  packingListItems: z.array(z.object({
+    description: z.string().optional(),
+    cartons: z.number().optional(),
+    netWeight: z.number(),      // REQUIRED - the weight value for this row
+    grossWeight: z.number().optional(),
+  })).optional().describe("Extract ALL rows from packing list table"),
+  packingListTotalNet: z.number().optional().describe("Printed 'Total Net Weight' at bottom"),
+  packingListTotalGross: z.number().optional().describe("Printed 'Total Gross Weight' at bottom"),
+
+  // Ullage Report line items (tank volumes)
+  ullageItems: z.array(z.object({
+    tankName: z.string().optional(),   // e.g., "1P", "2S", "3C"
+    volume: z.number(),                 // REQUIRED - volume in this tank
+    temperature: z.number().optional(),
+  })).optional().describe("Extract ALL tank measurements from ullage report"),
+  ullageTotalVolume: z.number().optional().describe("Printed 'Total' volume at bottom"),
+
+  // Invoice line items (for amount verification)
+  invoiceLineItems: z.array(z.object({
+    description: z.string().optional(),
+    quantity: z.number().optional(),
+    unitPrice: z.number().optional(),
+    lineTotal: z.number(),              // REQUIRED - amount for this line
+  })).optional().describe("Extract ALL line items from invoice"),
+  invoicePrintedTotal: z.number().optional().describe("Printed 'Total Amount' at bottom"),
 });
 
 const documentResultSchema = z.object({
@@ -405,6 +437,15 @@ SPECIAL EXTRACTION RULES:
 - invoiceDate: ONLY from Invoice - the invoice issue date
 - issueDate: From any certificate - the issue/certification date
 - inspectionDate: ONLY from Inspection Certificate - the date inspection was performed
+
+LINE ITEM EXTRACTION (CRITICAL FOR MATH VERIFICATION):
+- packingListItems: ONLY from Packing List - Extract EVERY row from the table as an array. Each row needs at minimum the netWeight (as a NUMBER, not string). Example: [{"description": "Avocados Grade A", "cartons": 100, "netWeight": 980.5, "grossWeight": 1050.2}, ...]
+- packingListTotalNet: ONLY from Packing List - The printed "Total Net Weight" at the bottom (as NUMBER)
+- packingListTotalGross: ONLY from Packing List - The printed "Total Gross Weight" at the bottom (as NUMBER)
+- ullageItems: ONLY from Ullage Report - Extract EVERY tank measurement as an array. Each needs at minimum the volume (as NUMBER). Example: [{"tankName": "1P", "volume": 11287.40}, {"tankName": "2S", "volume": 10007.00}, ...]
+- ullageTotalVolume: ONLY from Ullage Report - The printed "Total" volume at the bottom (as NUMBER)
+- invoiceLineItems: ONLY from Invoice - Extract EVERY line item as an array. Each needs at minimum lineTotal (as NUMBER). Example: [{"description": "Crude Oil", "quantity": 500000, "unitPrice": 75.50, "lineTotal": 37750000}, ...]
+- invoicePrintedTotal: ONLY from Invoice - The printed "Total Amount" at the bottom (as NUMBER)
 
 RULES:
 - Extract ALL fields present in the document
@@ -1427,6 +1468,90 @@ Respond with JSON only:
         severity: "critical",
         description: `B/L is "Received for Shipment" without shipped-on-board notation - bank will reject. Need dated on-board notation with vessel name.`,
       });
+    }
+
+    // ============================================================
+    // DETERMINISTIC MATH VERIFICATION (JavaScript, not LLM)
+    // LLMs extract rows, JavaScript sums them — no hallucination
+    // ============================================================
+
+    // Packing List weight verification
+    const packingList = documentResults.find((d) => d.type === "packing_list");
+    if (packingList?.extractedData.packingListItems && packingList.extractedData.packingListTotalNet) {
+      const items = packingList.extractedData.packingListItems;
+      const printedTotal = packingList.extractedData.packingListTotalNet;
+
+      if (items.length > 0) {
+        const calculatedSum = items.reduce((sum, item) => sum + (item.netWeight || 0), 0);
+        const diff = Math.abs(calculatedSum - printedTotal);
+
+        if (diff > 1.0) { // More than 1kg difference
+          crossRefIssues.push({
+            field: "packingListMath",
+            documents: ["Packing List"],
+            values: [
+              `Rows sum to: ${calculatedSum.toFixed(2)} kg`,
+              `Printed total: ${printedTotal.toFixed(2)} kg`,
+              `Difference: ${diff.toFixed(2)} kg`,
+            ],
+            severity: "critical",
+            description: `MATH ERROR: Packing list rows sum to ${calculatedSum.toFixed(2)} kg but printed total is ${printedTotal.toFixed(2)} kg — ${diff.toFixed(2)} kg discrepancy`,
+          });
+        }
+      }
+    }
+
+    // Ullage Report volume verification
+    const ullage = documentResults.find((d) => d.type === "ullage_report");
+    if (ullage?.extractedData.ullageItems && ullage.extractedData.ullageTotalVolume) {
+      const tanks = ullage.extractedData.ullageItems;
+      const printedTotal = ullage.extractedData.ullageTotalVolume;
+
+      if (tanks.length > 0) {
+        const calculatedSum = tanks.reduce((sum, tank) => sum + (tank.volume || 0), 0);
+        const diff = Math.abs(calculatedSum - printedTotal);
+        const percentDiff = (diff / printedTotal) * 100;
+
+        if (percentDiff > 0.1) { // More than 0.1% difference for oil volumes
+          crossRefIssues.push({
+            field: "ullageMath",
+            documents: ["Ullage Report"],
+            values: [
+              `Tanks sum to: ${calculatedSum.toFixed(2)}`,
+              `Printed total: ${printedTotal.toFixed(2)}`,
+              `Difference: ${diff.toFixed(2)} (${percentDiff.toFixed(2)}%)`,
+            ],
+            severity: "critical",
+            description: `MATH ERROR: Ullage tank volumes sum to ${calculatedSum.toFixed(2)} but printed total is ${printedTotal.toFixed(2)} — ${percentDiff.toFixed(2)}% discrepancy`,
+          });
+        }
+      }
+    }
+
+    // Invoice line item verification
+    if (invoice?.extractedData.invoiceLineItems && invoice.extractedData.invoicePrintedTotal) {
+      const lineItems = invoice.extractedData.invoiceLineItems;
+      const printedTotal = invoice.extractedData.invoicePrintedTotal;
+
+      if (lineItems.length > 0) {
+        const calculatedSum = lineItems.reduce((sum, item) => sum + (item.lineTotal || 0), 0);
+        const diff = Math.abs(calculatedSum - printedTotal);
+        const percentDiff = (diff / printedTotal) * 100;
+
+        if (diff > 1.0 && percentDiff > 0.01) { // More than $1 and 0.01% difference
+          crossRefIssues.push({
+            field: "invoiceMath",
+            documents: ["Invoice"],
+            values: [
+              `Lines sum to: ${calculatedSum.toFixed(2)}`,
+              `Printed total: ${printedTotal.toFixed(2)}`,
+              `Difference: ${diff.toFixed(2)}`,
+            ],
+            severity: "critical",
+            description: `MATH ERROR: Invoice line items sum to ${calculatedSum.toFixed(2)} but printed total is ${printedTotal.toFixed(2)} — possible fraud or typo`,
+          });
+        }
+      }
     }
 
     return {
