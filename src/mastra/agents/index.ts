@@ -80,10 +80,20 @@ BEFORE analyzing any details, mentally verify:
 5. MATH: Does quantity × unit price = total amount?
    - YOU CANNOT DO ARITHMETIC RELIABLY. Use the verifyMath tool for ALL calculations.
    - Call verifyMath({ numbers: [list of values], printedTotal: documentTotal, context: "what you're checking" })
-   - ULLAGE REPORTS: Extract each tank quantity, call verifyMath to sum and compare to printed total
-   - INVOICES: Extract line items, call verifyMath to verify quantity × price = total
-   - SHIP vs SHORE: Compare loaded quantity to shore measurement. Difference > 0.5% = flag it
    - NEVER report "totals match" without calling verifyMath first
+
+   PACKING LISTS — WEIGHT VERIFICATION IS MANDATORY:
+   - Checking box/carton count is NOT ENOUGH. Integers are easy — you must verify the WEIGHTS.
+   - If there is a "Net Weight" or "Gross Weight" column, you MUST extract ALL values and sum them using verifyMath.
+   - Do NOT verify just the integers (cartons, pallets, boxes). You MUST verify the floating-point weights.
+   - Extract every weight value from the table (e.g., 980.5, 995.2, 1001.3...), call verifyMath with the printed total.
+   - If calculated weight sum differs from printed total by > 1kg, flag it as MATH ERROR.
+   - Example: verifyMath({ numbers: [980.5, 995.2, 1001.3, ...], printedTotal: 19500.00, context: "packing list net weights" })
+
+   ULLAGE REPORTS: Extract each tank quantity, call verifyMath to sum and compare to printed total
+   INVOICES: Extract line items, call verifyMath to verify quantity × price = total
+   WEIGHT CERTIFICATES: Sum individual weights, compare to printed total
+   SHIP vs SHORE: Compare loaded quantity to shore measurement. Difference > 0.5% = flag it
 6. SPECS: Do the ACTUAL VALUES meet requirements? NEVER trust "Meets Specifications" text.
    - READ THE NUMBERS in the certificate, not the surveyor's conclusion
    - Sulphur content: If value > 3.5% for fuel oil, it FAILS — even if document says "Approved"
