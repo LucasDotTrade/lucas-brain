@@ -154,6 +154,15 @@ const documentTypeEnum = z.enum([
   "notice_of_readiness",
   "letter_of_indemnity",
   "weight_out_turn",
+  "export_license",
+  "certificate_of_ownership",
+  "cargo_manifest",
+  "vessel_q88",
+  "time_log",
+  "masters_receipt",
+  "tank_cleanliness_certificate",
+  "charter_party",
+  "dip_test_report",
 ]);
 
 const issueSchema = z.object({
@@ -207,6 +216,21 @@ const extractedDataSchema = z.object({
   wotDifference: z.string().optional(),             // Shortage or overage
   wotVesselName: z.string().optional(),             // Vessel name in WOT
   wotCargoDescription: z.string().optional(),       // Cargo description in WOT
+  // Export License fields
+  exportLicenseNumber: z.string().optional(),       // License/permit number
+  exportLicenseExporter: z.string().optional(),     // Authorized exporter
+  exportLicenseGoods: z.string().optional(),        // Goods description
+  exportLicenseDestination: z.string().optional(),  // Permitted destination
+  exportLicenseValidUntil: z.string().optional(),   // Expiry date
+  // Certificate of Ownership fields
+  ownershipSeller: z.string().optional(),           // Seller/transferor
+  ownershipBuyer: z.string().optional(),            // Buyer/transferee
+  ownershipVessel: z.string().optional(),           // Vessel name
+  ownershipCargo: z.string().optional(),            // Cargo description
+  // Tank Cleanliness fields
+  tankCleanlinessVessel: z.string().optional(),     // Vessel name
+  tankCleanlinessDate: z.string().optional(),       // Inspection date
+  tankCleanlinessInspector: z.string().optional(),  // Inspector/surveyor
 });
 
 const documentResultSchema = z.object({
@@ -322,7 +346,19 @@ Respond in this EXACT JSON format:
     "wotDischargeWeight": "68,450 MT",
     "wotDifference": "50 MT shortage (0.07%)",
     "wotVesselName": "MV Ocean Star",
-    "wotCargoDescription": "Murban Crude Oil"
+    "wotCargoDescription": "Murban Crude Oil",
+    "exportLicenseNumber": "EXP-2024-00456",
+    "exportLicenseExporter": "ADNOC TRADING LLC",
+    "exportLicenseGoods": "Murban Crude Oil",
+    "exportLicenseDestination": "Japan",
+    "exportLicenseValidUntil": "2024-12-31",
+    "ownershipSeller": "ADNOC TRADING LLC",
+    "ownershipBuyer": "GULF ENERGY TRADING LLC",
+    "ownershipVessel": "MV Ocean Star",
+    "ownershipCargo": "Murban Crude Oil",
+    "tankCleanlinessVessel": "MV Ocean Star",
+    "tankCleanlinessDate": "2024-02-25",
+    "tankCleanlinessInspector": "SGS Gulf Limited"
   },
   "analysis": "Brief analysis of this document's completeness and any internal issues."
 }
@@ -343,6 +379,18 @@ SPECIAL EXTRACTION RULES:
 - wotLoadingWeight: ONLY from WOT - weight at loading. Look for "Loaded:", "Loading figure:", "Ship figure at loading:"
 - wotDischargeWeight: ONLY from WOT - weight at discharge. Look for "Discharged:", "Outturn:", "Ship figure at discharge:"
 - wotDifference: ONLY from WOT - calculated shortage/overage. Look for "Shortage:", "Overage:", "Difference:", "Loss:"
+- exportLicenseNumber: ONLY from Export License - the license/permit number
+- exportLicenseExporter: ONLY from Export License - authorized exporter name
+- exportLicenseGoods: ONLY from Export License - goods description
+- exportLicenseDestination: ONLY from Export License - permitted destination country
+- exportLicenseValidUntil: ONLY from Export License - expiry/validity date
+- ownershipSeller: ONLY from Certificate of Ownership - seller/transferor name
+- ownershipBuyer: ONLY from Certificate of Ownership - buyer/transferee name
+- ownershipVessel: ONLY from Certificate of Ownership - vessel name
+- ownershipCargo: ONLY from Certificate of Ownership - cargo description
+- tankCleanlinessVessel: ONLY from Tank Cleanliness Cert - vessel name
+- tankCleanlinessDate: ONLY from Tank Cleanliness Cert - inspection date
+- tankCleanlinessInspector: ONLY from Tank Cleanliness Cert - inspector/surveyor name
 
 RULES:
 - Extract ALL fields present in the document
@@ -1066,6 +1114,135 @@ Respond with JSON only:
                 description: `Discharge weight exceeds loading by ${(Math.abs(loss) * 100).toFixed(2)}% — unusual, verify measurements`,
               });
             }
+          }
+        }
+      }
+
+      // Export License Cross-Reference Checks
+      const exportLic = documentResults.find((d) => d.type === "export_license");
+      if (exportLic) {
+        // Exporter should match LC beneficiary
+        if (exportLic.extractedData.exportLicenseExporter && lc?.extractedData.beneficiary) {
+          const licExporter = exportLic.extractedData.exportLicenseExporter.toLowerCase();
+          const lcBenef = lc.extractedData.beneficiary.toLowerCase();
+          if (!licExporter.includes(lcBenef.substring(0, 10)) && !lcBenef.includes(licExporter.substring(0, 10))) {
+            crossRefIssues.push({
+              field: "exportLicenseExporter",
+              documents: ["Export License", "LC"],
+              values: [`License: ${exportLic.extractedData.exportLicenseExporter}`, `LC Beneficiary: ${lc.extractedData.beneficiary}`],
+              severity: "critical",
+              description: "Export license exporter does not match LC beneficiary — sanctions risk",
+            });
+          }
+        }
+
+        // License must not be expired
+        if (exportLic.extractedData.exportLicenseValidUntil) {
+          const validUntil = new Date(exportLic.extractedData.exportLicenseValidUntil);
+          const today = new Date();
+          if (!isNaN(validUntil.getTime()) && validUntil < today) {
+            crossRefIssues.push({
+              field: "exportLicenseExpiry",
+              documents: ["Export License"],
+              values: [`Valid until: ${exportLic.extractedData.exportLicenseValidUntil}`],
+              severity: "critical",
+              description: "Export license has expired",
+            });
+          }
+        }
+      }
+
+      // Certificate of Ownership Cross-Reference Checks
+      const ownership = documentResults.find((d) => d.type === "certificate_of_ownership");
+      if (ownership) {
+        // Buyer should match LC applicant
+        if (ownership.extractedData.ownershipBuyer && lc?.extractedData.applicant) {
+          const certBuyer = ownership.extractedData.ownershipBuyer.toLowerCase();
+          const lcApplicant = lc.extractedData.applicant.toLowerCase();
+          if (!certBuyer.includes(lcApplicant.substring(0, 10)) && !lcApplicant.includes(certBuyer.substring(0, 10))) {
+            crossRefIssues.push({
+              field: "ownershipBuyer",
+              documents: ["Certificate of Ownership", "LC"],
+              values: [`Cert Buyer: ${ownership.extractedData.ownershipBuyer}`, `LC Applicant: ${lc.extractedData.applicant}`],
+              severity: "major",
+              description: "Ownership certificate buyer does not match LC applicant",
+            });
+          }
+        }
+
+        // Vessel should match B/L
+        if (ownership.extractedData.ownershipVessel && bl?.extractedData.vesselName) {
+          const certVessel = ownership.extractedData.ownershipVessel.toLowerCase().replace(/^(mv|m\/v|mt)\s*/i, "").trim();
+          const blVessel = bl.extractedData.vesselName.toLowerCase().replace(/^(mv|m\/v|mt)\s*/i, "").trim();
+          if (!certVessel.includes(blVessel) && !blVessel.includes(certVessel)) {
+            crossRefIssues.push({
+              field: "ownershipVessel",
+              documents: ["Certificate of Ownership", "B/L"],
+              values: [`Cert: ${ownership.extractedData.ownershipVessel}`, `B/L: ${bl.extractedData.vesselName}`],
+              severity: "major",
+              description: "Ownership certificate vessel does not match B/L",
+            });
+          }
+        }
+      }
+
+      // Tank Cleanliness Cross-Reference Checks
+      const tankClean = documentResults.find((d) => d.type === "tank_cleanliness_certificate");
+      if (tankClean) {
+        // Vessel must match B/L
+        if (tankClean.extractedData.tankCleanlinessVessel && bl?.extractedData.vesselName) {
+          const certVessel = tankClean.extractedData.tankCleanlinessVessel.toLowerCase().replace(/^(mv|m\/v|mt)\s*/i, "").trim();
+          const blVessel = bl.extractedData.vesselName.toLowerCase().replace(/^(mv|m\/v|mt)\s*/i, "").trim();
+          if (!certVessel.includes(blVessel) && !blVessel.includes(certVessel)) {
+            crossRefIssues.push({
+              field: "tankCleanlinessVessel",
+              documents: ["Tank Cleanliness Cert", "B/L"],
+              values: [`Cert: ${tankClean.extractedData.tankCleanlinessVessel}`, `B/L: ${bl.extractedData.vesselName}`],
+              severity: "major",
+              description: "Tank cleanliness certificate vessel does not match B/L",
+            });
+          }
+        }
+
+        // Tank inspection date must be BEFORE B/L date
+        if (tankClean.extractedData.tankCleanlinessDate && bl?.extractedData.shipmentDate) {
+          const inspDate = new Date(tankClean.extractedData.tankCleanlinessDate);
+          const blDate = new Date(bl.extractedData.shipmentDate);
+          if (!isNaN(inspDate.getTime()) && !isNaN(blDate.getTime()) && inspDate > blDate) {
+            crossRefIssues.push({
+              field: "tankCleanlinessDate",
+              documents: ["Tank Cleanliness Cert", "B/L"],
+              values: [`Inspection: ${tankClean.extractedData.tankCleanlinessDate}`, `B/L: ${bl.extractedData.shipmentDate}`],
+              severity: "critical",
+              description: "Tank cleanliness inspection dated AFTER B/L — logically impossible",
+            });
+          }
+        }
+      }
+
+      // Vessel Name Cross-Reference for Other O&G Documents
+      const vesselDocs: Array<{ type: string; name: string }> = [
+        { type: "cargo_manifest", name: "Cargo Manifest" },
+        { type: "vessel_q88", name: "Vessel Q88" },
+        { type: "time_log", name: "Time Log" },
+        { type: "masters_receipt", name: "Master's Receipt" },
+        { type: "charter_party", name: "Charter Party" },
+        { type: "dip_test_report", name: "Dip Test Report" },
+      ];
+
+      for (const vDoc of vesselDocs) {
+        const doc = documentResults.find((d) => d.type === vDoc.type);
+        if (doc?.extractedData.vesselName && bl?.extractedData.vesselName) {
+          const docVessel = doc.extractedData.vesselName.toLowerCase().replace(/^(mv|m\/v|mt)\s*/i, "").trim();
+          const blVessel = bl.extractedData.vesselName.toLowerCase().replace(/^(mv|m\/v|mt)\s*/i, "").trim();
+          if (!docVessel.includes(blVessel) && !blVessel.includes(docVessel)) {
+            crossRefIssues.push({
+              field: `${vDoc.type}VesselName`,
+              documents: [vDoc.name, "B/L"],
+              values: [`${vDoc.name}: ${doc.extractedData.vesselName}`, `B/L: ${bl.extractedData.vesselName}`],
+              severity: "major",
+              description: `${vDoc.name} vessel does not match B/L`,
+            });
           }
         }
       }
