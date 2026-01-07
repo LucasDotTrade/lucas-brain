@@ -152,6 +152,8 @@ const documentTypeEnum = z.enum([
   "weight_certificate",
   "non_manipulation_certificate",
   "notice_of_readiness",
+  "letter_of_indemnity",
+  "weight_out_turn",
 ]);
 
 const issueSchema = z.object({
@@ -192,6 +194,19 @@ const extractedDataSchema = z.object({
   quantityTolerance: z.string().optional(),         // From LC: "+/- 10%" or "5 PCT MORE OR LESS"
   shippedOnBoard: z.boolean().optional(),           // From B/L: true if "SHIPPED ON BOARD" present
   issuingBank: z.string().optional(),               // From LC: bank that issued the LC
+  // LOI (Letter of Indemnity) fields
+  loiBeneficiary: z.string().optional(),            // Who is indemnified (carrier or bank)
+  loiIndemnifier: z.string().optional(),            // Who gives indemnity (buyer/applicant)
+  loiVesselName: z.string().optional(),             // Vessel referenced in LOI
+  loiBlNumber: z.string().optional(),               // B/L number being replaced
+  loiCargoDescription: z.string().optional(),       // Cargo description in LOI
+  loiIndemnityValue: z.string().optional(),         // Indemnity amount (e.g., "200% of cargo value")
+  // WOT (Weight Out-Turn) fields
+  wotLoadingWeight: z.string().optional(),          // Weight at loading port
+  wotDischargeWeight: z.string().optional(),        // Weight at discharge port
+  wotDifference: z.string().optional(),             // Shortage or overage
+  wotVesselName: z.string().optional(),             // Vessel name in WOT
+  wotCargoDescription: z.string().optional(),       // Cargo description in WOT
 });
 
 const documentResultSchema = z.object({
@@ -296,7 +311,18 @@ Respond in this EXACT JSON format:
     "consignee": "TO ORDER OF NATIONAL BANK OF KUWAIT",
     "quantityTolerance": "+/- 10%",
     "shippedOnBoard": true,
-    "issuingBank": "NATIONAL BANK OF KUWAIT"
+    "issuingBank": "NATIONAL BANK OF KUWAIT",
+    "loiBeneficiary": "PACIFIC OCEAN CARRIERS",
+    "loiIndemnifier": "GULF ENERGY TRADING LLC",
+    "loiVesselName": "MV Ocean Star",
+    "loiBlNumber": "BL-2024-001",
+    "loiCargoDescription": "Murban Crude Oil",
+    "loiIndemnityValue": "200% of cargo value",
+    "wotLoadingWeight": "68,500 MT",
+    "wotDischargeWeight": "68,450 MT",
+    "wotDifference": "50 MT shortage (0.07%)",
+    "wotVesselName": "MV Ocean Star",
+    "wotCargoDescription": "Murban Crude Oil"
   },
   "analysis": "Brief analysis of this document's completeness and any internal issues."
 }
@@ -309,6 +335,14 @@ SPECIAL EXTRACTION RULES:
 - issuingBank: ONLY from LC - the bank that issued the credit
 - vesselName: From LC if specified (look for "Vessel:", "Intended Vessel:", "Nominated Vessel:"). From B/L always (look for "Vessel:", "Ship:", "MV", "MT")
 - insuredValue: ONLY from Insurance Certificate - look for "Sum Insured:", "Amount Insured:", "Insured Value:", or "Coverage Amount:"
+- loiBeneficiary: ONLY from LOI - party being indemnified (carrier, bank, terminal). Look for "indemnify", "hold harmless"
+- loiIndemnifier: ONLY from LOI - party giving indemnity. Look for "we hereby", "the undersigned"
+- loiVesselName: ONLY from LOI - vessel name referenced
+- loiBlNumber: ONLY from LOI - the B/L number being replaced or referenced
+- loiIndemnityValue: ONLY from LOI - indemnity amount or percentage (e.g., "200% of cargo value", "USD 5,000,000")
+- wotLoadingWeight: ONLY from WOT - weight at loading. Look for "Loaded:", "Loading figure:", "Ship figure at loading:"
+- wotDischargeWeight: ONLY from WOT - weight at discharge. Look for "Discharged:", "Outturn:", "Ship figure at discharge:"
+- wotDifference: ONLY from WOT - calculated shortage/overage. Look for "Shortage:", "Overage:", "Difference:", "Loss:"
 
 RULES:
 - Extract ALL fields present in the document
@@ -949,6 +983,89 @@ Respond with JSON only:
               severity: "major",
               description: `Insurance coverage insufficient - ${coverage}% of value (minimum 110% required for LC presentation)`,
             });
+          }
+        }
+      }
+
+      // LOI Cross-Reference Checks
+      const loi = documentResults.find((d) => d.type === "letter_of_indemnity");
+      if (loi) {
+        // LOI vessel must match B/L vessel
+        if (loi.extractedData.loiVesselName && bl?.extractedData.vesselName) {
+          const loiVessel = loi.extractedData.loiVesselName.toLowerCase().replace(/^(mv|m\/v|mt|m\.t\.)\s*/i, "").trim();
+          const blVessel = bl.extractedData.vesselName.toLowerCase().replace(/^(mv|m\/v|mt|m\.t\.)\s*/i, "").trim();
+          if (loiVessel !== blVessel && !loiVessel.includes(blVessel) && !blVessel.includes(loiVessel)) {
+            crossRefIssues.push({
+              field: "loiVesselName",
+              documents: ["LOI", "B/L"],
+              values: [`LOI: ${loi.extractedData.loiVesselName}`, `B/L: ${bl.extractedData.vesselName}`],
+              severity: "critical",
+              description: "LOI vessel name does not match B/L — bank will reject",
+            });
+          }
+        }
+
+        // LOI B/L number must match actual B/L
+        if (loi.extractedData.loiBlNumber && bl?.extractedData.blNumber) {
+          const loiBl = loi.extractedData.loiBlNumber.toLowerCase().replace(/\s/g, "");
+          const actualBl = bl.extractedData.blNumber.toLowerCase().replace(/\s/g, "");
+          if (loiBl !== actualBl && !loiBl.includes(actualBl) && !actualBl.includes(loiBl)) {
+            crossRefIssues.push({
+              field: "loiBlNumber",
+              documents: ["LOI", "B/L"],
+              values: [`LOI references: ${loi.extractedData.loiBlNumber}`, `Actual B/L: ${bl.extractedData.blNumber}`],
+              severity: "critical",
+              description: "LOI references wrong B/L number",
+            });
+          }
+        }
+      }
+
+      // WOT Cross-Reference Checks
+      const wot = documentResults.find((d) => d.type === "weight_out_turn");
+      if (wot) {
+        // WOT loading weight should match B/L weight (within tolerance)
+        if (wot.extractedData.wotLoadingWeight && bl?.extractedData.weight) {
+          const wotLoading = extractAmount(wot.extractedData.wotLoadingWeight);
+          const blWeight = extractAmount(bl.extractedData.weight);
+          if (wotLoading && blWeight) {
+            const diff = Math.abs(wotLoading - blWeight) / blWeight;
+            if (diff > 0.005) { // 0.5% tolerance
+              crossRefIssues.push({
+                field: "wotLoadingWeight",
+                documents: ["WOT", "B/L"],
+                values: [`WOT Loading: ${wot.extractedData.wotLoadingWeight}`, `B/L Weight: ${bl.extractedData.weight}`],
+                severity: "major",
+                description: `WOT loading weight differs from B/L by ${(diff * 100).toFixed(2)}% (max 0.5% tolerance)`,
+              });
+            }
+          }
+        }
+
+        // WOT shortage/overage check (typical tolerance 0.5% for crude)
+        if (wot.extractedData.wotLoadingWeight && wot.extractedData.wotDischargeWeight) {
+          const loading = extractAmount(wot.extractedData.wotLoadingWeight);
+          const discharge = extractAmount(wot.extractedData.wotDischargeWeight);
+          if (loading && discharge) {
+            const loss = (loading - discharge) / loading;
+            if (loss > 0.005) { // More than 0.5% shortage
+              crossRefIssues.push({
+                field: "wotShortage",
+                documents: ["WOT"],
+                values: [`Loading: ${wot.extractedData.wotLoadingWeight}`, `Discharge: ${wot.extractedData.wotDischargeWeight}`],
+                severity: "major",
+                description: `Transit loss of ${(loss * 100).toFixed(2)}% exceeds typical 0.5% tolerance — may trigger cargo claims`,
+              });
+            }
+            if (loss < -0.003) { // Overage more than 0.3%
+              crossRefIssues.push({
+                field: "wotOverage",
+                documents: ["WOT"],
+                values: [`Loading: ${wot.extractedData.wotLoadingWeight}`, `Discharge: ${wot.extractedData.wotDischargeWeight}`],
+                severity: "minor",
+                description: `Discharge weight exceeds loading by ${(Math.abs(loss) * 100).toFixed(2)}% — unusual, verify measurements`,
+              });
+            }
           }
         }
       }
