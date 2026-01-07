@@ -231,6 +231,14 @@ const extractedDataSchema = z.object({
   tankCleanlinessVessel: z.string().optional(),     // Vessel name
   tankCleanlinessDate: z.string().optional(),       // Inspection date
   tankCleanlinessInspector: z.string().optional(),  // Inspector/surveyor
+  // B/L freight and carrier fields (UCP 600 compliance)
+  freightNotation: z.string().optional(),           // "FREIGHT PREPAID" or "FREIGHT COLLECT"
+  carrierName: z.string().optional(),               // Shipping line name (e.g., "CMA CGM", "Maersk")
+  carrierSignature: z.boolean().optional(),         // true if signed by carrier/master/agent
+  // Additional date fields for consistency checks
+  invoiceDate: z.string().optional(),               // Invoice issue date
+  issueDate: z.string().optional(),                 // Generic issue date for certificates
+  inspectionDate: z.string().optional(),            // Inspection certificate date
 });
 
 const documentResultSchema = z.object({
@@ -391,6 +399,12 @@ SPECIAL EXTRACTION RULES:
 - tankCleanlinessVessel: ONLY from Tank Cleanliness Cert - vessel name
 - tankCleanlinessDate: ONLY from Tank Cleanliness Cert - inspection date
 - tankCleanlinessInspector: ONLY from Tank Cleanliness Cert - inspector/surveyor name
+- freightNotation: ONLY from B/L - look for "FREIGHT PREPAID", "FREIGHT COLLECT", "PREPAID", "COLLECT"
+- carrierName: ONLY from B/L - the shipping line or carrier name (e.g., "CMA CGM", "Maersk", "MSC", "Hapag-Lloyd")
+- carrierSignature: ONLY from B/L - true if document shows signature by carrier, master, or agent (look for "As Agent for Carrier", "For the Master", "Signed by", signature line)
+- invoiceDate: ONLY from Invoice - the invoice issue date
+- issueDate: From any certificate - the issue/certification date
+- inspectionDate: ONLY from Inspection Certificate - the date inspection was performed
 
 RULES:
 - Extract ALL fields present in the document
@@ -1243,6 +1257,114 @@ Respond with JSON only:
               severity: "major",
               description: `${vDoc.name} vessel does not match B/L`,
             });
+          }
+        }
+      }
+
+      // === GAP FIX 1: FREIGHT NOTATION CHECK ===
+      // LC may specify "FREIGHT PREPAID" or "FREIGHT COLLECT" - B/L must match
+      if (bl?.extractedData.freightNotation && lc?.extractedData.freightNotation) {
+        const blFreight = bl.extractedData.freightNotation.toLowerCase();
+        const lcFreight = lc.extractedData.freightNotation.toLowerCase();
+
+        const blIsPrepaid = blFreight.includes("prepaid");
+        const blIsCollect = blFreight.includes("collect");
+        const lcIsPrepaid = lcFreight.includes("prepaid");
+        const lcIsCollect = lcFreight.includes("collect");
+
+        if ((blIsPrepaid && lcIsCollect) || (blIsCollect && lcIsPrepaid)) {
+          crossRefIssues.push({
+            field: "freightNotation",
+            documents: ["B/L", "LC"],
+            values: [`B/L: ${bl.extractedData.freightNotation}`, `LC: ${lc.extractedData.freightNotation}`],
+            severity: "critical",
+            description: "Freight notation mismatch — B/L shows different freight terms than LC requires",
+          });
+        }
+      }
+
+      // === GAP FIX 2: B/L CARRIER SIGNATURE CHECK ===
+      // UCP 600 Article 20 requires B/L to be signed by carrier, master, or agent
+      if (bl) {
+        if (bl.extractedData.carrierSignature === false) {
+          crossRefIssues.push({
+            field: "carrierSignature",
+            documents: ["B/L"],
+            values: ["No carrier/master signature detected"],
+            severity: "critical",
+            description: "B/L must be signed by carrier, master, or named agent per UCP 600 Article 20",
+          });
+        }
+
+        if (!bl.extractedData.carrierName) {
+          crossRefIssues.push({
+            field: "carrierName",
+            documents: ["B/L"],
+            values: ["Carrier name not found"],
+            severity: "major",
+            description: "B/L should indicate the name of the carrier per UCP 600",
+          });
+        }
+      }
+
+      // === GAP FIX 3: DOCUMENT DATING CONSISTENCY ===
+      // All docs should have consistent/logical dates - certificates should not be dated after B/L
+      const blDateStr = bl?.extractedData.shipmentDate;
+      if (blDateStr) {
+        const blDate = new Date(blDateStr);
+        if (!isNaN(blDate.getTime())) {
+          // Check inspection certificate date
+          const inspectionCert = documentResults.find((d) => d.type === "inspection_certificate");
+          if (inspectionCert?.extractedData.inspectionDate) {
+            const inspDate = new Date(inspectionCert.extractedData.inspectionDate);
+            if (!isNaN(inspDate.getTime()) && inspDate > blDate) {
+              const daysDiff = (inspDate.getTime() - blDate.getTime()) / (1000 * 60 * 60 * 24);
+              if (daysDiff > 1) {
+                crossRefIssues.push({
+                  field: "documentDating",
+                  documents: ["Inspection Certificate", "B/L"],
+                  values: [`Inspection: ${inspectionCert.extractedData.inspectionDate}`, `B/L: ${blDateStr}`],
+                  severity: "major",
+                  description: `Inspection certificate dated ${Math.floor(daysDiff)} days AFTER B/L — logically inconsistent`,
+                });
+              }
+            }
+          }
+
+          // Check certificate of origin date
+          const co = documentResults.find((d) => d.type === "certificate_of_origin");
+          if (co?.extractedData.issueDate) {
+            const coDate = new Date(co.extractedData.issueDate);
+            if (!isNaN(coDate.getTime()) && coDate > blDate) {
+              const daysDiff = (coDate.getTime() - blDate.getTime()) / (1000 * 60 * 60 * 24);
+              if (daysDiff > 1) {
+                crossRefIssues.push({
+                  field: "documentDating",
+                  documents: ["Certificate of Origin", "B/L"],
+                  values: [`CO: ${co.extractedData.issueDate}`, `B/L: ${blDateStr}`],
+                  severity: "major",
+                  description: `Certificate of Origin dated ${Math.floor(daysDiff)} days AFTER B/L — logically inconsistent`,
+                });
+              }
+            }
+          }
+
+          // Check quality certificate date
+          const qualityCert = documentResults.find((d) => d.type === "certificate_of_quality");
+          if (qualityCert?.extractedData.issueDate) {
+            const qcDate = new Date(qualityCert.extractedData.issueDate);
+            if (!isNaN(qcDate.getTime()) && qcDate > blDate) {
+              const daysDiff = (qcDate.getTime() - blDate.getTime()) / (1000 * 60 * 60 * 24);
+              if (daysDiff > 1) {
+                crossRefIssues.push({
+                  field: "documentDating",
+                  documents: ["Certificate of Quality", "B/L"],
+                  values: [`Quality Cert: ${qualityCert.extractedData.issueDate}`, `B/L: ${blDateStr}`],
+                  severity: "major",
+                  description: `Quality certificate dated ${Math.floor(daysDiff)} days AFTER B/L — logically inconsistent`,
+                });
+              }
+            }
           }
         }
       }
