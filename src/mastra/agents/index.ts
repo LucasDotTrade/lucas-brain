@@ -1,8 +1,8 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
 import { PostgresStore, PgVector } from "@mastra/pg";
-// Scorers and processors removed - each adds an LLM call per request
-// Re-enable for eval runs, not production
+// Memory processors enabled - they don't add LLM calls, just filter/limit tokens
 import {
   // Tools reduced to only those mentioned in Lucas's instructions
   // Rationale: 7 of 10 tools called Railway API, creating circular latency
@@ -40,6 +40,10 @@ const lucasMemory = new Memory({
   storage,
   vector: vectorStore,
   embedder: "openai/text-embedding-3-small",
+  processors: [
+    new ToolCallFilter(),      // Strip verbose tool calls from history - saves ~3000 tokens/msg
+    new TokenLimiter(100000),  // Safety net - Claude Sonnet has 200k context
+  ],
   options: {
     workingMemory: {
       enabled: true,
@@ -47,10 +51,10 @@ const lucasMemory = new Memory({
       template: workingMemoryTemplate,
     },
     semanticRecall: {
-      topK: 1,
-      messageRange: 1,
+      topK: 3,          // Find 3 relevant past messages (was 1)
+      messageRange: 2,  // Include 2 messages around each match (was 1)
     },
-    lastMessages: 2,
+    lastMessages: 20,   // Keep last 20 messages in context (was 2!)
   },
 });
 
