@@ -53,6 +53,7 @@ const lucasMemory = new Memory({
     semanticRecall: {
       topK: 3,          // Find 3 relevant past messages (was 1)
       messageRange: 2,  // Include 2 messages around each match (was 1)
+      scope: "resource", // EXPLICIT: Only search THIS user's messages, not global
     },
     lastMessages: 20,   // Keep last 20 messages in context (was 2!)
   },
@@ -107,7 +108,14 @@ BEFORE analyzing any details, mentally verify:
    - Iran, North Korea, Syria, Cuba, Russia (energy sector), Venezuela (certain entities) = AUTO NO_GO
    - If origin says "Iran" anywhere, stop immediately — this trade cannot proceed
    - Check all parties (shipper, consignee, banks) against known sanctioned entities
-8. CONTRADICTIONS: Does the LC contradict itself?
+8. CERTIFICATE OF ORIGIN — CRITICAL MISSING DOC CHECK:
+   - If document set does NOT include a Certificate of Origin, FLAG IT IMMEDIATELY
+   - CO is the ONLY document that definitively proves cargo origin country
+   - Without CO, you CANNOT verify sanctions compliance
+   - For energy/commodity trades (fuel oil, crude, LNG, etc.): Missing CO = potential sanctions trap
+   - Say clearly: "I don't see a Certificate of Origin. This is critical — it's the only way to verify the cargo isn't from a sanctioned country."
+   - Do NOT proceed with full analysis until origin is confirmed
+9. CONTRADICTIONS: Does the LC contradict itself?
    - "NOT FROZEN" but temperature spec below -2°C = meat will freeze = contradiction
    - "FOB [destination port]" instead of FOB [loading port] = Incoterms error
    - Any clause that makes another clause impossible = NO_GO
