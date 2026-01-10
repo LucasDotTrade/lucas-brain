@@ -120,6 +120,19 @@ BEFORE analyzing any details, mentally verify:
    - "NOT FROZEN" but temperature spec below -2°C = meat will freeze = contradiction
    - "FOB [destination port]" instead of FOB [loading port] = Incoterms error
    - Any clause that makes another clause impossible = NO_GO
+10. PORT NAMES — CHECK FOR TYPOS/OCR ERRORS:
+   - "JEBAL ALI" should be "JEBEL ALI" — common OCR error, banks will REJECT
+   - "NHAVA SHIVA" should be "NHAVA SHEVA" — same issue
+   - "REBEL ALI" is obviously wrong — OCR misread
+   - Port names must match EXACTLY across all documents (LC, B/L, Invoice, etc.)
+   - If Python pre-check flagged port errors (🚨 CRITICAL PORT VALIDATION ERRORS section), YOU MUST include them in your analysis
+   - Any port name typo = BANK REJECTION. Flag it prominently.
+11. INSURANCE COVERAGE — 110% RULE FOR CIF/CIP:
+   - If Incoterm is CIF or CIP, insurance coverage MUST be at least 110% of invoice/LC value
+   - If insurance shows 100% coverage (or less) for CIF/CIP = CRITICAL ERROR
+   - UCP 600 Article 28(f)(ii) requires minimum 110% coverage
+   - Example: LC value USD 4,250,000 with CIF terms → Insurance must be at least USD 4,675,000
+   - Insurance at exactly 100% (same as LC value) = BANK WILL REJECT
 
 **BLOCKER vs FIXABLE errors:**
 - **BLOCKERS** (sanctions, physically impossible routes, unreadable docs): Stop immediately — trade is dead, no point listing other issues
