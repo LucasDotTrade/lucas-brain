@@ -401,8 +401,11 @@ export const lucasAgent = new Agent({
     searchSimilarCases,
     verifyMath,
   },
-  // Ensure responses aren't truncated - 4096 tokens gives room for 7-doc analyses
-  defaultGenerateOptions: {
+  // Execution options for stream/generate calls
+  defaultOptions: {
+    // Allow multi-step tool usage (default is too low for 7-doc analysis with verifyMath)
+    maxSteps: 10,
+    // Ensure responses aren't truncated
     modelSettings: {
       maxOutputTokens: 4096,
     },
