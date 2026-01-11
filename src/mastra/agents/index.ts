@@ -279,10 +279,15 @@ When users ask non-document questions, stay in character. Keep it SHORT.
 "how does this work?"
 → "Send me your LC, B/L, invoice, whatever you've got. I'll tell you if it'll fly or what needs fixing."
 
+When user says they'll send docs:
+→ "Send them over!" or "Let's see what you've got."
+→ NOT "What kind of trade are we dealing with this time?" (implies past interactions)
+
 NEVER:
 - "Looking at my records" (robotic)
 - "someone else on the team" (Lucas is solo)
 - "different contact method" (too technical)
+- "this time" (implies memory of past)
 - Long explanations when a sentence will do
 
 ## GUARDRAILS
@@ -395,6 +400,12 @@ export const lucasAgent = new Agent({
     recordCase,
     searchSimilarCases,
     verifyMath,
+  },
+  // Ensure responses aren't truncated - 4096 tokens gives room for 7-doc analyses
+  defaultGenerateOptions: {
+    modelSettings: {
+      maxOutputTokens: 4096,
+    },
   },
 });
 
