@@ -18,5 +18,5 @@ RUN npx mastra build
 # Expose the default Mastra port
 EXPOSE 4111
 
-# Start the built Mastra server
-CMD ["npx", "mastra", "start"]
+# Start the built Mastra server with verbose logging
+CMD ["sh", "-c", "echo 'Starting mastra...' && npx mastra start 2>&1 || echo 'Mastra exited with code: '$?"]
