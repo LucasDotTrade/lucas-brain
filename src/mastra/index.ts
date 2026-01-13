@@ -14,6 +14,8 @@ export const mastra = new Mastra({
   // workflows: { documentReviewWorkflow, packageValidationWorkflow },
   storage,
   server: {
+    port: parseInt(process.env.PORT || "4111"),
+    host: "0.0.0.0", // Bind to all interfaces for Railway
     timeout: 10 * 60 * 1000, // 10 minutes (default was 3 min - caused 503 timeouts)
     bodySizeLimit: 50 * 1024 * 1024, // 50 MB (default was 4.5 MB)
   },
