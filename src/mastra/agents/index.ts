@@ -410,6 +410,7 @@ export const lucasAgent = new Agent({
     // Ensure responses aren't truncated
     modelSettings: {
       maxOutputTokens: 4096,
+      temperature: 0,  // Deterministic analysis - same input = same output
     },
   },
 });
