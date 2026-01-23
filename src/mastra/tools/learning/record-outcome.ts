@@ -18,15 +18,15 @@ export const recordOutcome = createTool({
     success: z.boolean(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
       // Find the most recent case for this client if no caseId provided
-      let targetCaseId = context.caseId;
+      let targetCaseId = inputData.caseId;
 
       if (!targetCaseId) {
         const [recentCase] = await sql`
           select id from cases
-          where client_email = ${context.clientEmail}
+          where client_email = ${inputData.clientEmail}
           order by created_at desc
           limit 1
         `;
@@ -34,7 +34,7 @@ export const recordOutcome = createTool({
         if (!recentCase) {
           return {
             success: false,
-            message: `No recent case found for ${context.clientEmail}`,
+            message: `No recent case found for ${inputData.clientEmail}`,
           };
         }
         targetCaseId = recentCase.id;
@@ -42,16 +42,16 @@ export const recordOutcome = createTool({
 
       await sql`
         update cases set
-          outcome = ${context.outcome},
-          bank_feedback = ${context.bankFeedback || null},
-          lesson_learned = ${context.lessonLearned || null},
+          outcome = ${inputData.outcome},
+          bank_feedback = ${inputData.bankFeedback || null},
+          lesson_learned = ${inputData.lessonLearned || null},
           outcome_recorded_at = now()
         where id = ${targetCaseId!}
       `;
 
       return {
         success: true,
-        message: `Outcome recorded: ${context.outcome}. This helps everyone learn.`,
+        message: `Outcome recorded: ${inputData.outcome}. This helps everyone learn.`,
       };
     } catch (err) {
       console.error("❌ recordOutcome error:", err);

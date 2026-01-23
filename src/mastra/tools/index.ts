@@ -9,12 +9,12 @@ export const extractDocument = createTool({
   inputSchema: z.object({
     url: z.string().describe("URL of the document to extract"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
       const response = await fetch(`${RAILWAY_API}/extract-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: context.url }),
+        body: JSON.stringify({ url: inputData.url }),
       });
       
       if (!response.ok) {
@@ -41,9 +41,9 @@ export const validateDocuments = createTool({
   inputSchema: z.object({
     phone: z.string().describe("User phone number to retrieve their documents"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const cleanPhone = context.phone.replace("whatsapp:", "").replace("+", "");
+      const cleanPhone = inputData.phone.replace("whatsapp:", "").replace("+", "");
       
       const response = await fetch(`${RAILWAY_API}/validate`, {
         method: "POST",
@@ -70,11 +70,11 @@ export const searchPastCases = createTool({
     outcome: z.string().optional().describe("Filter: 'accepted', 'rejected', or 'pending'"),
     limit: z.number().optional().default(5).describe("Max results"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const params = new URLSearchParams({ q: context.query });
-      if (context.outcome) params.append("outcome", context.outcome);
-      if (context.limit) params.append("limit", context.limit.toString());
+      const params = new URLSearchParams({ q: inputData.query });
+      if (inputData.outcome) params.append("outcome", inputData.outcome);
+      if (inputData.limit) params.append("limit", inputData.limit.toString());
       
       const response = await fetch(`${RAILWAY_API}/traces/search?${params}`, {
         method: "GET",
@@ -99,9 +99,9 @@ export const getCustomerHistory = createTool({
   inputSchema: z.object({
     userId: z.string().describe("Phone number or email of the customer"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const cleanUserId = context.userId.replace("whatsapp:", "").replace("+", "");
+      const cleanUserId = inputData.userId.replace("whatsapp:", "").replace("+", "");
       
       const response = await fetch(`${RAILWAY_API}/traces/customer/${encodeURIComponent(cleanUserId)}`, {
         method: "GET",
@@ -126,9 +126,9 @@ export const getIssuePatterns = createTool({
   inputSchema: z.object({
     days: z.number().optional().default(30).describe("Time window in days"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const days = context.days || 30;
+      const days = inputData.days || 30;
       const response = await fetch(`${RAILWAY_API}/traces/patterns?days=${days}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -152,9 +152,9 @@ export const findSimilarCases = createTool({
   inputSchema: z.object({
     traceId: z.string().describe("UUID of the trace to find similar cases for"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const response = await fetch(`${RAILWAY_API}/traces/similar/${context.traceId}`, {
+      const response = await fetch(`${RAILWAY_API}/traces/similar/${inputData.traceId}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -178,12 +178,12 @@ export const getOutcomeStats = createTool({
     documentType: z.string().optional().describe("Filter by document type: lc, bl, invoice, etc."),
     userPhone: z.string().optional().describe("Filter by specific user's history"),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const cleanPhone = context.userPhone?.replace("whatsapp:", "").replace("+", "");
-      
+      const cleanPhone = inputData.userPhone?.replace("whatsapp:", "").replace("+", "");
+
       const params = new URLSearchParams();
-      if (context.documentType) params.append("document_type", context.documentType);
+      if (inputData.documentType) params.append("document_type", inputData.documentType);
       if (cleanPhone) params.append("user_phone", cleanPhone);
 
       const response = await fetch(`${RAILWAY_API}/traces/stats?${params}`, {
@@ -232,8 +232,8 @@ Example: verifyMath({ numbers: [11287.40, 10007.00, 9450.50], printedTotal: 3074
     printedTotal: z.number().describe("The total printed in the document"),
     context: z.string().optional().describe("What we're checking (e.g., 'tank volumes', 'invoice line items')"),
   }),
-  execute: async ({ context }) => {
-    const { numbers, printedTotal, context: mathContext } = context;
+  execute: async (inputData) => {
+    const { numbers, printedTotal, context: mathContext } = inputData;
 
     // Precise arithmetic (avoid floating point errors)
     const actualSum = numbers.reduce((a, b) => a + b, 0);
@@ -272,3 +272,4 @@ export { recordCase } from "./learning/record-case";
 // recordOutcome removed - now handled by Python feedback_loop.py for instant pattern learning
 export { searchSimilarCases } from "./learning/search-similar-cases";
 export { getClientInsights } from "./learning/get-client-insights";
+export { updateClientProfile } from "./learning/update-client-profile";

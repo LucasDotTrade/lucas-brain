@@ -36,7 +36,7 @@ export const getClientInsights = createTool({
     }).optional(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
       // Get verdict counts
       const verdictCounts = await sql`
@@ -52,7 +52,7 @@ export const getClientInsights = createTool({
           MIN(created_at) as first_seen,
           MAX(created_at) as last_seen
         FROM cases
-        WHERE client_email = ${context.clientEmail}
+        WHERE client_email = ${inputData.clientEmail}
       `;
 
       const stats = verdictCounts[0];
@@ -62,14 +62,14 @@ export const getClientInsights = createTool({
         return {
           success: true,
           hasHistory: false,
-          message: `No history found for ${context.clientEmail}`,
+          message: `No history found for ${inputData.clientEmail}`,
         };
       }
 
       // Get common issues
       const issueQuery = await sql`
         SELECT issues FROM cases
-        WHERE client_email = ${context.clientEmail}
+        WHERE client_email = ${inputData.clientEmail}
         AND issues IS NOT NULL
       `;
 
