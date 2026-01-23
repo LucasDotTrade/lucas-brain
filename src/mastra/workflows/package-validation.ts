@@ -1733,7 +1733,7 @@ export const packageValidationWorkflow = createWorkflow({
   }),
 })
   .then(prepareDocsStep)
-  .foreach(analyzeDocStep, { concurrency: 5 })
+  .foreach(analyzeDocStep, { concurrency: 8 })
   .then(crossReferenceStep)
   .then(finalVerdictStep)
   .then(recordPackageStep)
