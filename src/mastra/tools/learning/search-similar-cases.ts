@@ -4,7 +4,12 @@ import postgres from "postgres";
 import { z } from "zod";
 
 const sql = postgres(process.env.DATABASE_URL!);
-const openai = new OpenAI();
+// Lazy init to avoid module-load errors when env vars aren't ready
+let _openai: OpenAI | null = null;
+const getOpenAI = () => {
+  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return _openai;
+};
 
 export const searchSimilarCases = createTool({
   id: "searchSimilarCases",
@@ -29,7 +34,7 @@ export const searchSimilarCases = createTool({
   execute: async (inputData) => {
     try {
       // Embed the query
-      const embeddingResponse = await openai.embeddings.create({
+      const embeddingResponse = await getOpenAI().embeddings.create({
         model: "text-embedding-3-small",
         input: inputData.query,
       });
