@@ -1,5 +1,4 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { RuntimeContext } from "@mastra/core/runtime-context";
 import { z } from "zod";
 import { recordCase } from "../tools/learning/record-case";
 
@@ -58,10 +57,9 @@ const analyzeStep = createStep({
     // Generate a thread ID for this workflow run
     const threadId = `workflow-${Date.now()}-${inputData.clientEmail}`;
 
-    const response = await lucas.generate(
-      `Analyze this ${inputData.documentType}:\n\n${inputData.documentText}`,
-      { resourceId: inputData.clientEmail, threadId }
-    );
+    const response = await lucas.generate([
+      { role: "user", content: `Analyze this ${inputData.documentType}:\n\n${inputData.documentText}` }
+    ]);
 
     // Parse verdict from response (simplified - in real use, use structured output)
     let verdict: "GO" | "WAIT" | "NO_GO" = "WAIT";
@@ -97,20 +95,29 @@ const recordCaseStep = createStep({
     analysis: z.string(),
   }),
   execute: async ({ inputData }) => {
-    // Use the recordCase tool
+    // Use the recordCase tool directly - in v1 tools are called with just the input data
+    if (!recordCase.execute) {
+      throw new Error("recordCase.execute is not defined");
+    }
     const result = await recordCase.execute({
-      context: {
-        clientEmail: inputData.clientEmail,
-        documentType: inputData.documentType,
+      clientEmail: inputData.clientEmail,
+      documentType: inputData.documentType,
+      verdict: inputData.verdict,
+      issues: inputData.issues,
+      adviceSummary: inputData.analysis.substring(0, 500),
+    }, {});
+
+    // Handle both success and error cases
+    if ('caseId' in result && result.caseId) {
+      return {
+        caseId: result.caseId,
         verdict: inputData.verdict,
-        issues: inputData.issues,
-        adviceSummary: inputData.analysis.substring(0, 500),
-      },
-      runtimeContext: new RuntimeContext(),
-    });
+        analysis: inputData.analysis,
+      };
+    }
 
     return {
-      caseId: result.caseId || "unknown",
+      caseId: "unknown",
       verdict: inputData.verdict,
       analysis: inputData.analysis,
     };

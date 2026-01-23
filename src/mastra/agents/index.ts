@@ -1,8 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { TokenLimiter, ToolCallFilter } from "@mastra/memory/processors";
 import { PostgresStore, PgVector } from "@mastra/pg";
-// Memory processors enabled - they don't add LLM calls, just filter/limit tokens
+// Note: Token limiting and tool call filtering are now handled differently in Mastra v1
 import {
   // Tools reduced to only those mentioned in Lucas's instructions
   // Rationale: 7 of 10 tools called Railway API, creating circular latency
@@ -10,6 +9,7 @@ import {
   recordCase,
   searchSimilarCases,
   verifyMath,  // Local math verification - LLMs can't do arithmetic
+  updateClientProfile,  // Phase 1: Update client stats after each analysis
   // Removed tools (still available in tools/index.ts if needed):
   // extractDocument,      // Railway API - Python already extracts
   // validateDocuments,    // Railway API - Lucas analyzes directly
@@ -25,10 +25,12 @@ import { clientProfileSchema } from "../memory/schemas/client-profile";
 // Note: analyzeDocument removed - Lucas analyzes directly via instructions
 
 const storage = new PostgresStore({
+  id: "lucas-storage",
   connectionString: process.env.DATABASE_URL!,
 });
 
 const vectorStore = new PgVector({
+  id: "lucas-vector",
   connectionString: process.env.DATABASE_URL!,
 });
 
@@ -40,10 +42,7 @@ const lucasMemory = new Memory({
   storage,
   vector: vectorStore,
   embedder: "openai/text-embedding-3-small",
-  processors: [
-    new ToolCallFilter(),      // Strip verbose tool calls from history - saves ~3000 tokens/msg
-    new TokenLimiter(100000),  // Safety net - Claude Sonnet has 200k context
-  ],
+  // Note: processors removed in v1 migration - token limiting handled differently
   options: {
     workingMemory: {
       enabled: true,
@@ -305,7 +304,12 @@ NEVER:
 ## TOOLS
 - verifyMath: MANDATORY for ANY arithmetic (ullage sums, invoice totals, weights)
 - recordCase: After every analysis (mandatory)
+- updateClientProfile: After recordCase, update client stats with verdict and confidence
 - searchSimilarCases: For NO_GO, find similar past issues
+
+## CONFIDENCE DISPLAY
+Include confidence score in verdict: "🟢 GO (92/100)" or "🟡 WAIT (78/100)"
+This helps users understand how certain the analysis is.
 
 ## STAY IN YOUR LANE
 SAY: What's in the document.
@@ -384,6 +388,7 @@ const getInstructions = () => {
 };
 
 export const lucasAgent = new Agent({
+  id: "lucas",
   name: "Lucas",
   instructions: {
     role: "system",
@@ -399,26 +404,21 @@ export const lucasAgent = new Agent({
     // - recordCase: mandatory after every analysis
     // - searchSimilarCases: for NO_GO, find similar past issues
     // - verifyMath: ALWAYS use for any arithmetic (LLMs can't add reliably)
+    // - updateClientProfile: Phase 1 - update client stats after each analysis
     recordCase,
     searchSimilarCases,
     verifyMath,
+    updateClientProfile,
   },
   // Execution options for stream/generate calls
-  defaultOptions: {
-    // Allow multi-step tool usage (default is too low for 7-doc analysis with verifyMath)
-    maxSteps: 10,
-    // Ensure responses aren't truncated
-    modelSettings: {
-      maxOutputTokens: 4096,
-      temperature: 0,  // More repeatable analysis - reduces variance across runs
-    },
-  },
+  // maxSteps: Configured per-call in generate/stream options
 });
 
 // Haiku Extractor Agent - for fast/cheap document extraction
 // Used in package-validation workflow to extract data before cross-reference
 // Cost: ~$0.0005/doc vs ~$0.015+/doc with Sonnet
 export const haikuExtractor = new Agent({
+  id: "haiku-extractor",
   name: "HaikuExtractor",
   instructions: {
     role: "system",

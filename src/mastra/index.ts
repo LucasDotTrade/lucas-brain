@@ -6,6 +6,7 @@ import { lucasAgent, haikuExtractor } from "./agents";
 // import { packageValidationWorkflow } from "./workflows/package-validation";
 
 const storage = new PostgresStore({
+  id: "mastra-storage",
   connectionString: process.env.DATABASE_URL!,
 });
 
@@ -19,7 +20,5 @@ export const mastra = new Mastra({
     timeout: 10 * 60 * 1000, // 10 minutes (default was 3 min - caused 503 timeouts)
     bodySizeLimit: 50 * 1024 * 1024, // 50 MB (default was 4.5 MB)
   },
-  observability: {
-    default: { enabled: true },
-  },
+  // Note: observability requires @mastra/observability package in v1
 });

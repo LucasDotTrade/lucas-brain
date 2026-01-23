@@ -26,12 +26,12 @@ export const searchSimilarCases = createTool({
     })),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
       // Embed the query
       const embeddingResponse = await openai.embeddings.create({
         model: "text-embedding-3-small",
-        input: context.query,
+        input: inputData.query,
       });
       const embedding = embeddingResponse.data[0].embedding;
 
@@ -48,7 +48,7 @@ export const searchSimilarCases = createTool({
         FROM cases
         WHERE embedding IS NOT NULL
         ORDER BY embedding <=> ${JSON.stringify(embedding)}::vector
-        LIMIT ${context.limit || 3}
+        LIMIT ${inputData.limit || 3}
       `;
 
       if (results.length === 0) {
