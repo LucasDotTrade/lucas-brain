@@ -1,5 +1,5 @@
 {
-  "name": "weather-agent",
+  "name": "lucas-brain",
   "version": "1.0.0",
   "main": "index.js",
   "private": true,
@@ -10,7 +10,7 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
-  "description": "One Agent, one Workflow and one Tool to bring you the weather in your city.",
+  "description": "Lucas AI reasoning agent — trade finance document analysis via Mastra + Anthropic.",
   "type": "module",
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.1",

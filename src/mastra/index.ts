@@ -1,9 +1,6 @@
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 import { lucasAgent, haikuExtractor } from "./agents";
-// Workflows disabled for self-hosting - they cause table creation issues with Supabase pooler
-// import { documentReviewWorkflow } from "./workflows/document-review";
-// import { packageValidationWorkflow } from "./workflows/package-validation";
 
 const storage = new PostgresStore({
   id: "mastra-storage",
@@ -12,13 +9,11 @@ const storage = new PostgresStore({
 
 export const mastra = new Mastra({
   agents: { lucasAgent, haikuExtractor },
-  // workflows: { documentReviewWorkflow, packageValidationWorkflow },
   storage,
   server: {
     port: parseInt(process.env.PORT || "4111"),
-    host: "0.0.0.0", // Bind to all interfaces for Railway
-    timeout: 10 * 60 * 1000, // 10 minutes (default was 3 min - caused 503 timeouts)
-    bodySizeLimit: 50 * 1024 * 1024, // 50 MB (default was 4.5 MB)
+    host: "0.0.0.0",
+    timeout: 10 * 60 * 1000, // 10 min (default 3 min caused 503 timeouts)
+    bodySizeLimit: 50 * 1024 * 1024, // 50 MB
   },
-  // Note: observability requires @mastra/observability package in v1
 });
