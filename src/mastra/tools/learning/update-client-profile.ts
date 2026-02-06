@@ -122,6 +122,50 @@ Example: updateClientProfile({
         console.log("⚠️ case_outcomes table not available (Phase 1 migration pending):", String(trackingErr).substring(0, 100));
       }
 
+      // Deterministic stats sync: directly update working memory in mastra_resources
+      // This bypasses the LLM — stats are always correct even if the LLM forgets
+      // to update the <working_memory> tags in its response
+      try {
+        // Try both versioned and unversioned resource IDs
+        const versionedId = resourceId.endsWith(":v2") ? resourceId : `${resourceId}:v2`;
+
+        const resources = await sql`
+          SELECT id, "workingMemory"
+          FROM mastra_resources
+          WHERE id = ${versionedId} OR id = ${resourceId}
+          LIMIT 1
+        `;
+
+        if (resources.length > 0 && resources[0].workingMemory) {
+          const resource = resources[0];
+          try {
+            const profile = JSON.parse(resource.workingMemory);
+            // Update only the stats section — preserve all other profile data
+            profile.stats = {
+              totalDocumentsReviewed: newStats.totalDocumentsReviewed,
+              goCount: newStats.goCount,
+              waitCount: newStats.waitCount,
+              noGoCount: newStats.noGoCount,
+            };
+            await sql`
+              UPDATE mastra_resources
+              SET "workingMemory" = ${JSON.stringify(profile)},
+                  "updatedAt" = NOW(),
+                  "updatedAtZ" = NOW()
+              WHERE id = ${resource.id}
+            `;
+            console.log("✅ Working memory stats synced deterministically:", newStats);
+          } catch (parseErr) {
+            console.log("⚠️ Could not parse working memory for stats sync:", String(parseErr).substring(0, 100));
+          }
+        } else {
+          console.log("⚠️ No mastra_resources record found for stats sync (resource:", versionedId, ")");
+        }
+      } catch (syncErr) {
+        // Non-fatal: stats sync is best-effort improvement, tool still returns stats for LLM
+        console.log("⚠️ Working memory stats sync failed (non-fatal):", String(syncErr).substring(0, 100));
+      }
+
       console.log("✅ Client profile updated:", newStats);
 
       return {

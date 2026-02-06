@@ -3,22 +3,10 @@ import { Memory } from "@mastra/memory";
 import { PostgresStore, PgVector } from "@mastra/pg";
 // Note: Token limiting and tool call filtering are now handled differently in Mastra v1
 import {
-  // Tools reduced to only those mentioned in Lucas's instructions
-  // Rationale: 7 of 10 tools called Railway API, creating circular latency
-  // Python (Railway) → Mastra → Tools → Railway = timeout
   recordCase,
   searchSimilarCases,
-  verifyMath,  // Local math verification - LLMs can't do arithmetic
-  updateClientProfile,  // Phase 1: Update client stats after each analysis
-  // Removed tools (still available in tools/index.ts if needed):
-  // extractDocument,      // Railway API - Python already extracts
-  // validateDocuments,    // Railway API - Lucas analyzes directly
-  // searchPastCases,      // Railway API - use searchSimilarCases instead
-  // getCustomerHistory,   // Railway API - decision_traces has this
-  // getIssuePatterns,     // Railway API - nice to have
-  // findSimilarCases,     // Railway API - duplicate of searchSimilarCases
-  // getOutcomeStats,      // Railway API - nice to have
-  // getClientInsights,    // Postgres - nice to have
+  verifyMath,
+  updateClientProfile,
 } from "../tools";
 import { clientProfileSchema } from "../memory/schemas/client-profile";
 
