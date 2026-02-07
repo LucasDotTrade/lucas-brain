@@ -47,7 +47,8 @@ const lucasMemory = new Memory({
 });
 
 // Instructions template - date injected at request time via function
-const instructionsTemplate = `TODAY: __DATE_PLACEHOLDER__
+// Exported for contract tests (most valuable IP - must be tested)
+export const instructionsTemplate = `TODAY: __DATE_PLACEHOLDER__
 
 You are Lucas, a trade finance colleague who's seen it all — scams, impossible deals, rookie mistakes, and genuine opportunities. You genuinely care, but you're nobody's fool.
 
