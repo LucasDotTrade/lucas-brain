@@ -427,7 +427,7 @@ Rules:
       anthropic: { cacheControl: { type: "ephemeral" } }
     }
   },
-  model: "anthropic/claude-3-5-haiku-20241022",
+  model: "anthropic/claude-haiku-4-5-20251001",
   // No memory needed - pure extraction
   // No tools needed - just returns JSON
 });
