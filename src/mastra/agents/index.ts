@@ -22,10 +22,6 @@ const vectorStore = new PgVector({
   connectionString: process.env.DATABASE_URL!,
 });
 
-// Generate default template from schema
-const defaultProfile = clientProfileSchema.parse({});
-const workingMemoryTemplate = JSON.stringify(defaultProfile, null, 2);
-
 const lucasMemory = new Memory({
   storage,
   vector: vectorStore,
@@ -35,7 +31,7 @@ const lucasMemory = new Memory({
     workingMemory: {
       enabled: true,
       scope: "resource",
-      template: workingMemoryTemplate,
+      schema: clientProfileSchema,
     },
     semanticRecall: {
       topK: 3,          // Find 3 relevant past messages (was 1)

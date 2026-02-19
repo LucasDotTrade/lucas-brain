@@ -140,13 +140,51 @@ Example: updateClientProfile({
           const resource = resources[0];
           try {
             const profile = JSON.parse(resource.workingMemory);
-            // Update only the stats section — preserve all other profile data
+            // Update stats section
             profile.stats = {
               totalDocumentsReviewed: newStats.totalDocumentsReviewed,
               goCount: newStats.goCount,
               waitCount: newStats.waitCount,
               noGoCount: newStats.noGoCount,
             };
+
+            // Accumulate products (deduplicated)
+            if (product) {
+              if (!profile.products) profile.products = [];
+              if (!profile.products.includes(product)) {
+                profile.products.push(product);
+              }
+            }
+
+            // Accumulate trade routes (deduplicated by origin+destination)
+            if (tradeRoute) {
+              if (!profile.tradeRoutes) profile.tradeRoutes = [];
+              const exists = profile.tradeRoutes.some(
+                (r: { origin: string; destination: string }) =>
+                  r.origin === tradeRoute.origin && r.destination === tradeRoute.destination
+              );
+              if (!exists) {
+                profile.tradeRoutes.push(tradeRoute);
+              }
+            }
+
+            // Accumulate common issues (increment count if existing, add if new)
+            if (issues && issues.length > 0) {
+              if (!profile.commonIssues) profile.commonIssues = [];
+              const today = new Date().toISOString().split("T")[0];
+              for (const issue of issues) {
+                const existing = profile.commonIssues.find(
+                  (i: { issue: string }) => i.issue === issue
+                );
+                if (existing) {
+                  existing.count = (existing.count || 1) + 1;
+                  existing.lastSeen = today;
+                } else {
+                  profile.commonIssues.push({ issue, count: 1, lastSeen: today });
+                }
+              }
+            }
+
             await sql`
               UPDATE mastra_resources
               SET "workingMemory" = ${JSON.stringify(profile)},
@@ -154,7 +192,12 @@ Example: updateClientProfile({
                   "updatedAtZ" = NOW()
               WHERE id = ${resource.id}
             `;
-            console.log("✅ Working memory stats synced deterministically:", newStats);
+            console.log("✅ Working memory synced deterministically:", {
+              stats: newStats,
+              products: profile.products?.length || 0,
+              tradeRoutes: profile.tradeRoutes?.length || 0,
+              commonIssues: profile.commonIssues?.length || 0,
+            });
           } catch (parseErr) {
             console.log("⚠️ Could not parse working memory for stats sync:", String(parseErr).substring(0, 100));
           }
