@@ -9,10 +9,15 @@
 - src/mastra/agents/index.ts - Lucas agent definition
 - src/mastra/tools/index.ts - Tools (call Railway API)
 - src/mastra/index.ts - Mastra instance
+- src/evals/scorers.ts - 5 deterministic scorers (wraps output-validators.ts)
+- src/evals/seed-data.ts - 5 eval test cases with ground truth
+- src/evals/run-eval.ts - Eval runner script
 
-## Current State
-- Rolled back to commit be8173b (working)
-- Future: Add Zod schema memory, new tools incrementally
+## Evals
+- Run with `npm run eval` (uses `railway run` for env vars, ~$0.15/run)
+- 5 deterministic scorers: verdict format, no date words, no semicolons, required sections, verdict accuracy
+- Eval agent is lightweight (no memory/storage) — same instructions + model as production
+- Run evals when changing prompts or models, not on every commit
 
 ## Do NOT
 - Make system prompt too long (causes rate limits)

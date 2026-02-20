@@ -472,12 +472,13 @@ const agentsStore = await store.getStore('agents');
 - TokenLimiter processor
 - Working memory with schema
 - Semantic recall
+- Custom scorers (5 deterministic, via createScorer + runEvals)
 
 ### Could Add
 
 1. **PIIDetector** - Redact sensitive info from documents before storing
 2. **ModerationProcessor** - Block harmful content
-3. **Scorers** - Track answer quality over time
+3. **LLM Scorers** - Add model-judged scorers (faithfulness, hallucination) alongside existing deterministic ones
 4. **SystemPromptScrubber** - Prevent prompt leakage in responses
 5. **GraphRAG** - Better document retrieval for complex queries
 6. **Workflows** - Multi-step document validation pipelines
@@ -496,10 +497,8 @@ inputProcessors: [
   }),
 ],
 
-// 2. Add scorers to track quality
-scorers: {
-  relevancy: createAnswerRelevancyScorer({ model: 'anthropic/claude-3-5-haiku-20241022' }),
-},
+// 2. Scorers — DONE (see src/evals/scorers.ts)
+// 5 deterministic scorers registered in Mastra config + run via `npm run eval`
 
 // 3. Add model fallback
 model: [
