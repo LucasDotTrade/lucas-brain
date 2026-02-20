@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "test": "vitest run",
-    "dev": "mastra dev"
+    "dev": "mastra dev",
+    "eval": "railway run npx tsx src/evals/run-eval.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,11 +17,11 @@
     "@ai-sdk/anthropic": "^3.0.1",
     "@ai-sdk/openai": "^3.0.1",
     "@anthropic-ai/sdk": "^0.71.2",
-    "@mastra/core": "^1.0.4",
+    "@mastra/core": "^1.5.0",
     "@mastra/evals": "^1.0.0",
     "@mastra/loggers": "^1.0.0",
     "@mastra/memory": "^1.0.0",
-    "@mastra/pg": "^1.0.0",
+    "@mastra/pg": "^1.5.0",
     "@supabase/supabase-js": "^2.89.0",
     "openai": "^6.15.0",
     "postgres": "^3.4.7",
