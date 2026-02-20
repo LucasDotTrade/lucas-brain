@@ -1,6 +1,13 @@
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 import { lucasAgent, haikuExtractor } from "./agents";
+import {
+  verdictFormatScorer,
+  noDateWordsScorer,
+  noSemicolonsScorer,
+  requiredSectionsScorer,
+  verdictAccuracyScorer,
+} from "../evals/scorers";
 
 const storage = new PostgresStore({
   id: "mastra-storage",
@@ -10,6 +17,13 @@ const storage = new PostgresStore({
 export const mastra = new Mastra({
   agents: { lucasAgent, haikuExtractor },
   storage,
+  scorers: {
+    verdictFormatScorer,
+    noDateWordsScorer,
+    noSemicolonsScorer,
+    requiredSectionsScorer,
+    verdictAccuracyScorer,
+  },
   server: {
     port: parseInt(process.env.PORT || "4111"),
     host: "0.0.0.0",
