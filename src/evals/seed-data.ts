@@ -105,6 +105,8 @@ NOTES: Amounts within tolerance`,
     groundTruth: {
       scenario: "Clean B/L + LC — no issues",
       expectedVerdict: "GO",
+      mustMention: ["ACME TRADING", "HOUSTON", "JEBEL ALI", "polyethylene"],
+      mustNotMention: ["expired", "mismatch", "discrepancy"],
     },
   },
   {
@@ -149,6 +151,8 @@ NOTES: Amounts within tolerance`,
     groundTruth: {
       scenario: "Port mismatch — B/L vs LC",
       expectedVerdict: "NO_GO",
+      mustMention: ["JEBEL ALI", "DUBAI", "port"],
+      mustNotMention: ["expired", "days remaining"],
     },
   },
   {
@@ -192,6 +196,8 @@ NOTES: Ports match`,
     groundTruth: {
       scenario: "Amount mismatch — invoice vs LC",
       expectedVerdict: "NO_GO",
+      mustMention: ["150,000", "162,500", "amount"],
+      mustNotMention: ["expired"],
     },
   },
   {
@@ -231,6 +237,8 @@ NOTES: All other checks passed`,
     groundTruth: {
       scenario: "Shipper ≠ Beneficiary — normal in commodity trades",
       expectedVerdict: "GO",
+      mustMention: ["shipper", "beneficiary"],
+      mustNotMention: ["expired", "mismatch"],
     },
   },
   {
@@ -278,6 +286,8 @@ NOTES: Parties match`,
     groundTruth: {
       scenario: "Multiple issues — partial shipment + stale docs",
       expectedVerdict: "NO_GO",
+      mustMention: ["partial shipment"],
+      mustNotMention: ["expired", "days remaining"],
     },
   },
 ];

@@ -9,13 +9,18 @@
 - src/mastra/agents/index.ts - Lucas agent definition
 - src/mastra/tools/index.ts - Tools (call Railway API)
 - src/mastra/index.ts - Mastra instance
-- src/evals/scorers.ts - 5 deterministic scorers (wraps output-validators.ts)
+- src/evals/scorers.ts - 8 scorers (5 deterministic + 3 LLM-judged)
 - src/evals/seed-data.ts - 5 eval test cases with ground truth
 - src/evals/run-eval.ts - Eval runner script
 
 ## Evals
-- Run with `npm run eval` (uses `railway run` for env vars, ~$0.15/run)
+- Run with `npm run eval` (uses `railway run` for env vars, ~$0.17/run)
+- `npm run eval -- --quick` for deterministic-only (~$0.15/run)
 - 5 deterministic scorers: verdict format, no date words, no semicolons, required sections, verdict accuracy
+- 3 LLM-judged scorers (Haiku as judge, ~$0.001/call):
+  - entity-grounding: catches hallucinated entity names (OCEAN SAINT class)
+  - finding-faithfulness: catches fabricated/contradicted findings
+  - prompt-alignment: checks Senior Reviewer contract compliance
 - Eval agent is lightweight (no memory/storage) — same instructions + model as production
 - Run evals when changing prompts or models, not on every commit
 

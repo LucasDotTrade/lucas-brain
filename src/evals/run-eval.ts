@@ -1,5 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { runEvals } from "@mastra/core/evals";
+import type { MastraScorer } from "@mastra/core/evals";
 import { instructionsTemplate } from "../mastra/agents/index";
 import { seedItems } from "./seed-data";
 import {
@@ -8,6 +9,9 @@ import {
   noSemicolonsScorer,
   requiredSectionsScorer,
   verdictAccuracyScorer,
+  entityGroundingScorer,
+  findingFaithfulnessScorer,
+  promptAlignmentScorer,
 } from "./scorers";
 
 // Lightweight agent for eval — same instructions + model, no memory/storage
@@ -21,17 +25,37 @@ const evalAgent = new Agent({
   model: process.env.MODEL || "anthropic/claude-sonnet-4-20250514",
 });
 
-async function main() {
-  console.log("=== Lucas Senior Reviewer Eval ===\n");
-  console.log(`Running ${seedItems.length} test cases...\n`);
+const quickMode = process.argv.includes("--quick");
 
-  const scorers = [
-    verdictFormatScorer,
-    noDateWordsScorer,
-    noSemicolonsScorer,
-    requiredSectionsScorer,
-    verdictAccuracyScorer,
-  ];
+const deterministicScorers: MastraScorer[] = [
+  verdictFormatScorer,
+  noDateWordsScorer,
+  noSemicolonsScorer,
+  requiredSectionsScorer,
+  verdictAccuracyScorer,
+];
+
+const llmScorers: MastraScorer[] = [
+  entityGroundingScorer,
+  findingFaithfulnessScorer,
+  promptAlignmentScorer,
+];
+
+async function main() {
+  const scorers = quickMode
+    ? deterministicScorers
+    : [...deterministicScorers, ...llmScorers];
+
+  console.log("=== Lucas Senior Reviewer Eval ===\n");
+  console.log(
+    `Mode: ${quickMode ? "quick (deterministic only)" : "full (deterministic + LLM-judged)"}`
+  );
+  console.log(
+    `Running ${seedItems.length} test cases × ${scorers.length} scorers...\n`
+  );
+
+  // Accumulate per-scorer scores for summary
+  const scorerTotals: Record<string, { sum: number; count: number }> = {};
 
   const result = await runEvals({
     data: seedItems,
@@ -45,8 +69,14 @@ async function main() {
       for (const [name, res] of Object.entries(scorerResults)) {
         const score = (res as any)?.score ?? "?";
         const reason = (res as any)?.reason ?? "";
-        const icon = score >= 1 ? "pass" : score > 0 ? "warn" : "FAIL";
+        const icon =
+          score >= 0.9 ? "pass" : score >= 0.5 ? "warn" : "FAIL";
         console.log(`  [${icon}] ${name}: ${score} — ${reason}`);
+        if (typeof score === "number") {
+          if (!scorerTotals[name]) scorerTotals[name] = { sum: 0, count: 0 };
+          scorerTotals[name].sum += score;
+          scorerTotals[name].count += 1;
+        }
       }
     },
   });
@@ -55,19 +85,14 @@ async function main() {
   console.log("\n=== Summary ===");
   console.log(`Total items: ${result.summary.totalItems}`);
 
-  const allScores: number[] = [];
-  for (const [, scorerData] of Object.entries(result.scores)) {
-    const avg = (scorerData as any)?.average;
-    if (typeof avg === "number") {
-      allScores.push(avg);
-      console.log(
-        `  ${(scorerData as any)?.scorerName || "scorer"}: avg ${(avg * 100).toFixed(1)}%`
-      );
-    }
+  const allAvgs: number[] = [];
+  for (const [name, { sum, count }] of Object.entries(scorerTotals)) {
+    const avg = sum / count;
+    allAvgs.push(avg);
+    console.log(`  ${name}: avg ${(avg * 100).toFixed(1)}%`);
   }
-  if (allScores.length > 0) {
-    const overall =
-      allScores.reduce((a, b) => a + b, 0) / allScores.length;
+  if (allAvgs.length > 0) {
+    const overall = allAvgs.reduce((a, b) => a + b, 0) / allAvgs.length;
     console.log(`\n=== Overall: ${(overall * 100).toFixed(1)}% ===`);
   }
 }

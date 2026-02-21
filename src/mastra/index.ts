@@ -7,6 +7,9 @@ import {
   noSemicolonsScorer,
   requiredSectionsScorer,
   verdictAccuracyScorer,
+  entityGroundingScorer,
+  findingFaithfulnessScorer,
+  promptAlignmentScorer,
 } from "../evals/scorers";
 
 const storage = new PostgresStore({
@@ -23,6 +26,9 @@ export const mastra = new Mastra({
     noSemicolonsScorer,
     requiredSectionsScorer,
     verdictAccuracyScorer,
+    entityGroundingScorer,
+    findingFaithfulnessScorer,
+    promptAlignmentScorer,
   },
   server: {
     port: parseInt(process.env.PORT || "4111"),
