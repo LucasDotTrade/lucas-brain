@@ -39,7 +39,9 @@ const lucasMemory = new Memory({
       scope: "resource", // EXPLICIT: Only search THIS user's messages, not global
     },
     lastMessages: 20,   // Keep last 20 messages in context (was 2!)
-    observationalMemory: true, // Compress long conversations via Observer/Reflector agents (Gemini Flash, ~$0.001/trigger)
+    observationalMemory: {
+      model: "anthropic/claude-haiku-4-5-20251001", // No Gemini API key configured — use Haiku instead of default Gemini Flash
+    },
   },
 });
 
