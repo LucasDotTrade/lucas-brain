@@ -4,6 +4,7 @@
 FROM node:22-slim
 
 WORKDIR /app
+ENV MASTRA_TELEMETRY_DISABLED=1
 
 # Install dependencies first (better layer caching)
 COPY package.json package-lock.json* ./
