@@ -36,10 +36,6 @@ export const mastra = new Mastra({
     findingFaithfulnessScorer,
     promptAlignmentScorer,
   },
-  backgroundTasks: {
-    enabled: true,
-    progressThrottleMs: 500,
-  },
   server: {
     port: parseInt(process.env.PORT || "4111"),
     host: "0.0.0.0",
