@@ -15,9 +15,16 @@ import {
   promptAlignmentScorer,
 } from "../evals/scorers";
 
+const storageMaxConnections = Number.parseInt(
+  process.env.MASTRA_STORAGE_MAX_CONNECTIONS || "4",
+  10,
+);
+
 const storage = new PostgresStore({
   id: "mastra-storage",
   connectionString: process.env.DATABASE_URL!,
+  max: Number.isFinite(storageMaxConnections) ? storageMaxConnections : 4,
+  idleTimeoutMillis: 10_000,
 });
 
 export const mastra = new Mastra({
