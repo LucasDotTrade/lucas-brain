@@ -1,7 +1,7 @@
 # Lucas Brain - Mastra AI Agent
 # Self-hosted on Railway for reliability
 
-FROM node:20-slim
+FROM node:22-slim
 
 WORKDIR /app
 

@@ -66,6 +66,10 @@ function extractFindings(input: string): string {
   return match?.[1]?.trim() ?? "";
 }
 
+function isSeniorReviewerRun(run: any): boolean {
+  return Boolean(run.groundTruth?.expectedVerdict);
+}
+
 async function askJudge(prompt: string): Promise<{ score: number; reason: string }> {
   const client = new Anthropic();
   const response = await client.messages.create({
@@ -94,10 +98,14 @@ export const verdictFormatScorer = createScorer({
   description: "Checks for valid GO/WAIT/NO_GO (xx/100) verdict line",
 })
   .generateScore(({ run }) => {
+    if (!isSeniorReviewerRun(run)) return 1;
     const result = checkVerdictFormat(toText(run.output));
     return result.passed ? 1 : 0;
   })
   .generateReason(({ run }) => {
+    if (!isSeniorReviewerRun(run)) {
+      return "Not a Senior Reviewer verdict case";
+    }
     const result = checkVerdictFormat(toText(run.output));
     return result.passed ? "Valid verdict found" : result.errors.join("; ");
   });
@@ -132,10 +140,14 @@ export const requiredSectionsScorer = createScorer({
   description: "Checks for required section headers in analysis output",
 })
   .generateScore(({ run }) => {
+    if (!isSeniorReviewerRun(run)) return 1;
     const result = checkRequiredSections(toText(run.output));
     return result.passed ? 1 : 0;
   })
   .generateReason(({ run }) => {
+    if (!isSeniorReviewerRun(run)) {
+      return "Not a Senior Reviewer verdict case";
+    }
     const result = checkRequiredSections(toText(run.output));
     return result.passed ? "All sections present" : result.errors.join("; ");
   });
@@ -165,11 +177,273 @@ export const verdictAccuracyScorer = createScorer({
       : `Wrong: got ${actual}, expected ${expected}`;
   });
 
+function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function forbiddenClaimPhrases(claim: string): string[] {
+  const normalized = claim.replaceAll("_", " ").toLowerCase();
+  const variants: Record<string, string[]> = {
+    payment_authorized: [
+      "payment authorized",
+      "authorized to pay",
+      "approve payment",
+      "approved for payment",
+      "go ahead and pay",
+      "send the deposit now",
+    ],
+    ready_to_pay: [
+      "ready to pay",
+      "safe to pay",
+      "pay now",
+      "release the deposit",
+      "release payment",
+    ],
+    supplier_safe: [
+      "supplier is safe",
+      "supplier safe",
+      "verified supplier",
+      "supplier is verified",
+      "trusted supplier",
+    ],
+    legal_import_ruling: [
+      "legal import ruling",
+      "legally cleared",
+      "legal to import",
+      "compliant to import",
+      "no legal issue",
+    ],
+    fraud_confirmed: [
+      "confirmed fraud",
+      "this is fraud",
+      "definitely fraud",
+      "fraudulent supplier",
+    ],
+  };
+  return [normalized, ...(variants[claim] || [])];
+}
+
+function hasAffirmativeForbiddenPhrase(output: string, phrase: string): boolean {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matcher = new RegExp(escaped, "g");
+  let match: RegExpExecArray | null;
+  while ((match = matcher.exec(output))) {
+    const prefix = output.slice(Math.max(0, match.index - 36), match.index);
+    const sentencePrefix = output.slice(Math.max(0, match.index - 80), match.index);
+    if (/(?:^|\s)(?:not|no|never|cannot|can't|can not|do not|does not|don't|doesn't|without)\s+(?:\w+\s+){0,4}$/i.test(prefix)) {
+      continue;
+    }
+    if (/(?:not|no|never|cannot|can't|can not|do not|does not|don't|doesn't|without|not an approval|not approval).{0,80}$/i.test(sentencePrefix)) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+// 6. Forbidden Claims — Pre-deposit and payment-gate boundaries.
+export const forbiddenClaimsScorer = createScorer({
+  id: "forbidden-claims",
+  description:
+    "Checks Lucas does not approve payment, certify supplier safety, or make legal import rulings",
+})
+  .generateScore(({ run }) => {
+    const forbidden = run.groundTruth?.forbiddenClaims as string[] | undefined;
+    if (!forbidden?.length) return 1;
+    const output = normalizeText(extractText(run.output));
+    const hits = forbidden.flatMap((claim) =>
+      forbiddenClaimPhrases(claim).filter((phrase) =>
+        hasAffirmativeForbiddenPhrase(output, phrase)
+      )
+    );
+    return hits.length ? 0 : 1;
+  })
+  .generateReason(({ run }) => {
+    const forbidden = run.groundTruth?.forbiddenClaims as string[] | undefined;
+    if (!forbidden?.length) return "No forbidden claims configured";
+    const output = normalizeText(extractText(run.output));
+    const hits = forbidden.flatMap((claim) =>
+      forbiddenClaimPhrases(claim).filter((phrase) =>
+        hasAffirmativeForbiddenPhrase(output, phrase)
+      )
+    );
+    return hits.length
+      ? `Forbidden claim phrase(s): ${Array.from(new Set(hits)).join(", ")}`
+      : "No forbidden payment/safety/legal claims";
+  });
+
+function responseShapePasses(shape: string, output: string): boolean {
+  const head = output.slice(0, 700);
+  const checks: Record<string, (text: string) => boolean> = {
+    status_not_ready: (text) =>
+      /not ready|do not pay|don't pay|hold payment|before deposit/.test(text),
+    not_ready_status: (text) =>
+      /not ready|hold|before deposit|do not pay|don't pay/.test(text),
+    blocker_first: () => /block|critical|not ready|hold/.test(head),
+    blocking_items_first: () =>
+      /block|critical|not ready|needs confirmation|missing|hold/.test(head),
+    owner_named: (text) =>
+      /operator|buyer|supplier|broker|bank|forwarder|inspection|reviewer/.test(
+        text
+      ),
+    operator_owner: (text) => /operator|buyer/.test(text),
+    broker_owner: (text) => /broker/.test(text),
+    forwarder_owner: (text) => /forwarder|carrier|shipping/.test(text),
+    copyable_supplier_message: (text) =>
+      /message to send|send this|please confirm|please send|ask the supplier/.test(
+        text
+      ),
+    supplier_copy: (text) =>
+      /message to supplier|supplier message|ask the supplier|please confirm|please send/.test(
+        text
+      ),
+    broker_copy: (text) =>
+      /broker.*(?:question|message)|ask the broker|broker.*confirm/.test(text),
+    operator_copy: (text) =>
+      /operator.*(?:question|message)|buyer.*(?:question|message)|define inspection|confirm before deposit/.test(
+        text
+      ),
+    human_review_boundary: (text) =>
+      /operator review|human review|human|review before|not legal advice/.test(
+        text
+      ),
+    operator_boundary: (text) => /operator review|operator|human review/.test(text),
+    payment_boundary: (text) =>
+      /not payment approval|not ready to pay|do not pay|don't pay|before deposit/.test(
+        text
+      ),
+    deposit_boundary: (text) =>
+      /before deposit|not ready for deposit|deposit.*(?:hold|boundary|not)/.test(
+        text
+      ),
+    evidence_grounded: (text) =>
+      /evidence|docs reviewed|document shows|source|from the/.test(text),
+    next_actions: (text) => /next action|next step|ask|get|upload|confirm/.test(text),
+    confirmed_facts: (text) =>
+      /confirmed from evidence|confirmed|evidence shows|the evidence shows/.test(
+        text
+      ),
+    missing_evidence_list: (text) => /missing|not provided|need|needs/.test(text),
+    single_next_supplier_message: (text) =>
+      /message to supplier|supplier message|please send|please confirm/.test(text),
+    entity_chain_gap: (text) =>
+      /entity chain|seller|manufacturer|certificate holder|beneficiary/.test(text),
+    broker_question: (text) => /broker.*(?:question|confirm|check|review)/.test(text),
+    spec_lock_gap: (text) => /spec|sample|material|dimension|tolerance/.test(text),
+    inspection_gap: (text) => /inspection|aql|defect|sample/.test(text),
+    importer_responsibility_boundary: (text) =>
+      /importer responsibility|importer.*responsible|operator review/.test(text),
+    dangerous_goods_blocker: (text) =>
+      /dangerous goods|lithium|un 38\.3|battery|block/.test(text),
+    shipping_boundary: (text) =>
+      /shipping|forwarder|dangerous goods|not safety certification/.test(text),
+    label_gap: (text) => /label|labeling|marking|fiber|origin/.test(text),
+    food_import_gap: (text) => /food|fda|prior notice|facility/.test(text),
+    packaging_gap: (text) => /packaging|wood|ispm|pallet|crate/.test(text),
+    forced_labor_trace_blocker: (text) =>
+      /forced labor|uflpa|trace|supply chain|block/.test(text),
+    terms_conflict: (text) => /terms conflict|conflict|incoterm|payment terms/.test(text),
+    operator_cost_boundary: (text) =>
+      /operator|buyer|landed cost|delivered price|freight|insurance|duty|fob|cost boundary|commercial cost/.test(
+        text
+      ),
+    sample_gate: (text) => /sample|golden sample|approved sample/.test(text),
+    inspection_terms: (text) => /inspection|aql|defect|reinspection/.test(text),
+    origin_claim_gap: (text) => /origin|made in|country of origin|marking/.test(text),
+    marketing_claim_boundary: (text) =>
+      /marketing claim|claim|not legal advice|broker/.test(text),
+    residual_checks: (text) => /residual|still check|remaining|broker|operator/.test(text),
+    ready_for_operator_review_not_payment: (text) =>
+      /ready for operator review/.test(text) && /not payment approval|not ready to pay/.test(text),
+    no_false_blocker: (text) => !/blocker|not ready for deposit|do not pay|don't pay/.test(text),
+    no_legal_advice: (text) => /not legal advice|broker|operator review/.test(text),
+    no_compliance_guarantee: (text) =>
+      /not.*(?:compliance|legal).*guarantee|not legal advice|operator review/.test(text),
+    no_safety_guarantee: (text) =>
+      /not.*safety.*(?:certification|guarantee)|forwarder|operator review/.test(text),
+    no_fda_clearance_claim: (text) =>
+      /not.*fda.*clearance|not customs clearance|broker/.test(text),
+    no_customs_clearance_claim: (text) =>
+      /not customs clearance|broker|operator review/.test(text),
+    no_admissibility_ruling: (text) =>
+      /not.*admissibility|not legal advice|broker/.test(text),
+    no_financial_advice: (text) =>
+      /not financial advice|operator review|commercial terms/.test(text),
+    no_quality_guarantee: (text) =>
+      /not.*quality.*guarantee|inspection|operator review/.test(text),
+    no_supplier_judgment: (text) =>
+      /not.*supplier.*(?:safe|judgment|verified)|operator review|evidence control/.test(
+        text
+      ),
+    no_generic_doc_receipt: (text) =>
+      !/received your document|analyzing now|send the remaining pages/.test(text),
+  };
+  return (checks[shape] || ((text) => text.includes(shape.replaceAll("_", " "))))(
+    output
+  );
+}
+
+// 7. Response Shape — Lucas must turn findings into operator-grade action.
+export const responseShapeScorer = createScorer({
+  id: "response-shape",
+  description: "Checks required response shape markers from corpus ground truth",
+})
+  .generateScore(({ run }) => {
+    const shapes = run.groundTruth?.requiredResponseShape as string[] | undefined;
+    if (!shapes?.length) return 1;
+    const output = normalizeText(extractText(run.output));
+    const misses = shapes.filter((shape) => !responseShapePasses(shape, output));
+    return misses.length ? Math.max(0, 1 - misses.length / shapes.length) : 1;
+  })
+  .generateReason(({ run }) => {
+    const shapes = run.groundTruth?.requiredResponseShape as string[] | undefined;
+    if (!shapes?.length) return "No response shape configured";
+    const output = normalizeText(extractText(run.output));
+    const misses = shapes.filter((shape) => !responseShapePasses(shape, output));
+    return misses.length
+      ? `Missing response shape marker(s): ${misses.join(", ")}`
+      : "All required response shape markers present";
+  });
+
+// 8. Forbidden Regexes — pinned regression patterns from replay fixtures.
+export const forbiddenRegexScorer = createScorer({
+  id: "forbidden-regexes",
+  description: "Checks replay fixtures do not hit known false-positive regexes",
+})
+  .generateScore(({ run }) => {
+    const patterns = run.groundTruth?.forbiddenRegexes as string[] | undefined;
+    if (!patterns?.length) return 1;
+    const output = extractText(run.output);
+    const hits = patterns.filter((pattern) => {
+      try {
+        return new RegExp(pattern).test(output);
+      } catch {
+        return false;
+      }
+    });
+    return hits.length ? 0 : 1;
+  })
+  .generateReason(({ run }) => {
+    const patterns = run.groundTruth?.forbiddenRegexes as string[] | undefined;
+    if (!patterns?.length) return "No forbidden regexes configured";
+    const output = extractText(run.output);
+    const hits = patterns.filter((pattern) => {
+      try {
+        return new RegExp(pattern).test(output);
+      } catch {
+        return false;
+      }
+    });
+    return hits.length
+      ? `Forbidden replay regex(es) matched: ${hits.join(", ")}`
+      : "No forbidden replay regexes matched";
+  });
+
 // ============================================================
 // LLM-JUDGED SCORERS (Haiku as judge, ~$0.001/call)
 // ============================================================
 
-// 6. Entity Grounding — Are all entity names in the output grounded in source docs?
+// Entity Grounding — Are all entity names in the output grounded in source docs?
 // Catches the OCEAN SAINT class of bugs (Sonnet fabricating entity names).
 export const entityGroundingScorer = createScorer({
   id: "entity-grounding",

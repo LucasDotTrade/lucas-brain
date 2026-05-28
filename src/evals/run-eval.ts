@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { runEvals } from "@mastra/core/evals";
 import type { MastraScorer } from "@mastra/core/evals";
 import { instructionsTemplate } from "../mastra/agents/index";
+import { loadControlPlaneSeedItems } from "./control-plane-cases";
 import { seedItems } from "./seed-data";
 import {
   verdictFormatScorer,
@@ -9,6 +10,9 @@ import {
   noSemicolonsScorer,
   requiredSectionsScorer,
   verdictAccuracyScorer,
+  forbiddenClaimsScorer,
+  responseShapeScorer,
+  forbiddenRegexScorer,
   entityGroundingScorer,
   findingFaithfulnessScorer,
   promptAlignmentScorer,
@@ -26,6 +30,7 @@ const evalAgent = new Agent({
 });
 
 const quickMode = process.argv.includes("--quick");
+const includeControlPlane = process.argv.includes("--control-plane") || process.argv.includes("--all");
 
 const deterministicScorers: MastraScorer[] = [
   verdictFormatScorer,
@@ -33,6 +38,9 @@ const deterministicScorers: MastraScorer[] = [
   noSemicolonsScorer,
   requiredSectionsScorer,
   verdictAccuracyScorer,
+  forbiddenClaimsScorer,
+  responseShapeScorer,
+  forbiddenRegexScorer,
 ];
 
 const llmScorers: MastraScorer[] = [
@@ -42,6 +50,9 @@ const llmScorers: MastraScorer[] = [
 ];
 
 async function main() {
+  const data = includeControlPlane
+    ? [...seedItems, ...loadControlPlaneSeedItems()]
+    : seedItems;
   const scorers = quickMode
     ? deterministicScorers
     : [...deterministicScorers, ...llmScorers];
@@ -51,14 +62,14 @@ async function main() {
     `Mode: ${quickMode ? "quick (deterministic only)" : "full (deterministic + LLM-judged)"}`
   );
   console.log(
-    `Running ${seedItems.length} test cases × ${scorers.length} scorers...\n`
+    `Running ${data.length} test cases × ${scorers.length} scorers...\n`
   );
 
   // Accumulate per-scorer scores for summary
   const scorerTotals: Record<string, { sum: number; count: number }> = {};
 
   const result = await runEvals({
-    data: seedItems,
+    data,
     scorers,
     target: evalAgent,
     concurrency: 2,
