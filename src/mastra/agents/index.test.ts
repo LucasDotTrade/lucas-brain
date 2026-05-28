@@ -161,6 +161,21 @@ describe("System Prompt Contract", () => {
       expect(instructionsTemplate).toMatch(/\d+\/100/);
     });
   });
+
+  describe("Pre-Deposit mode", () => {
+    it("defines the importer pre-deposit response contract", () => {
+      expect(instructionsTemplate).toContain("PRE-DEPOSIT MODE");
+      expect(instructionsTemplate).toContain("[Stage: pre_deposit]");
+      expect(instructionsTemplate).toContain("Ready for operator review");
+      expect(instructionsTemplate).toContain("Message to supplier");
+    });
+
+    it("keeps payment and supplier-safety boundaries explicit", () => {
+      expect(instructionsTemplate).toContain("not payment approval");
+      expect(instructionsTemplate).toContain("not \"ready to pay\"");
+      expect(instructionsTemplate).toContain("Do not accuse anyone of fraud");
+    });
+  });
 });
 
 // =============================================================================
