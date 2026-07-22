@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Backfill embeddings for existing cases
- * Usage: OPENAI_API_KEY=sk-... node scripts/backfill-embeddings.js
+ * Usage: DATABASE_URL=postgresql://... OPENAI_API_KEY=sk-... node scripts/backfill-embeddings.cjs
  */
 
 const OpenAI = require('openai');
@@ -9,10 +9,16 @@ const postgres = require('postgres');
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
+if (!DATABASE_URL) {
+  console.error('❌ DATABASE_URL not set');
+  console.error('Usage: DATABASE_URL=postgresql://... OPENAI_API_KEY=sk-... node scripts/backfill-embeddings.cjs');
+  process.exit(1);
+}
+
 async function backfill() {
   if (!process.env.OPENAI_API_KEY) {
     console.error('❌ OPENAI_API_KEY not set');
-    console.error('Usage: OPENAI_API_KEY=sk-... node scripts/backfill-embeddings.js');
+    console.error('Usage: DATABASE_URL=postgresql://... OPENAI_API_KEY=sk-... node scripts/backfill-embeddings.cjs');
     process.exit(1);
   }
 
