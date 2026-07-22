@@ -9,17 +9,20 @@ import {
   updateClientProfile,
 } from "../tools";
 import { clientProfileSchema } from "../memory/schemas/client-profile";
+import { AGENT_DATABASE_POOL_OPTIONS } from "../db-pool-config";
 
 // Note: analyzeDocument removed - Lucas analyzes directly via instructions
 
 const storage = new PostgresStore({
   id: "lucas-storage",
   connectionString: process.env.DATABASE_URL!,
+  ...AGENT_DATABASE_POOL_OPTIONS,
 });
 
 const vectorStore = new PgVector({
   id: "lucas-vector",
   connectionString: process.env.DATABASE_URL!,
+  ...AGENT_DATABASE_POOL_OPTIONS,
 });
 
 const lucasMemory = new Memory({

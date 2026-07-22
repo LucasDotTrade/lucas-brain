@@ -2,8 +2,9 @@ import { createTool } from "@mastra/core/tools";
 import OpenAI from "openai";
 import postgres from "postgres";
 import { z } from "zod";
+import { TOOL_DATABASE_POOL_OPTIONS } from "../../db-pool-config";
 
-const sql = postgres(process.env.DATABASE_URL!);
+const sql = postgres(process.env.DATABASE_URL!, TOOL_DATABASE_POOL_OPTIONS);
 // Lazy init to avoid module-load errors when env vars aren't ready
 let _openai: OpenAI | null = null;
 const getOpenAI = () => {

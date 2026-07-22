@@ -1,8 +1,9 @@
 import { createTool } from "@mastra/core/tools";
 import postgres from "postgres";
 import { z } from "zod";
+import { TOOL_DATABASE_POOL_OPTIONS } from "../../db-pool-config";
 
-const sql = postgres(process.env.DATABASE_URL!);
+const sql = postgres(process.env.DATABASE_URL!, TOOL_DATABASE_POOL_OPTIONS);
 
 /**
  * updateClientProfile - Phase 1: Mastra Quick Wins
